@@ -1,0 +1,114 @@
+
+;;;
+;;; Some common definitions
+;;;
+
+dev_send	extern
+dev_poll	extern
+dev_init	extern	
+
+arp_in		extern
+arp_resolve	extern
+memclr		extern
+memcpy		extern
+
+ip_in		extern
+ip_out		extern
+ip_out2		extern
+ip_cmp		extern
+ip_cksum	extern
+ip_setmask	extern
+proto		extern
+ripaddr		extern
+dipaddr		extern
+ipbroad		extern
+rlen		extern
+ipnet		extern
+ipmask		extern
+gateway		extern
+dns		extern
+ipaddr		extern
+
+
+eth_in		extern
+eth_out		extern
+mac		extern
+type		extern
+dmac		extern
+bmac		extern
+cmp_mac		extern
+
+udp_init	extern
+udp_in		extern
+udp_out		extern
+udp_out2	extern
+sport		extern
+dport		extern
+pdu		extern
+pdulen		extern
+
+icmp_in		extern
+
+insize		extern
+inbuf		extern
+inmax		extern
+
+dhcp_init	extern
+
+time		extern
+pause		extern
+
+
+for_sock	extern
+next_sock	extern
+
+resolve		extern
+ans		extern
+
+; initialize the system
+ip6809_init	extern
+
+; allocate a new socket
+;  takes B = type (C_UDP,etc...)
+;  returns conn = new socket, C set on error
+socket		extern
+
+; This is a pointer to a socket struct
+conn		extern
+
+
+; send data to socket
+;   takes: conn = socket, X = ptr to pdu, D = length
+send	   	extern
+
+
+; closes a socket
+close	        extern
+
+
+; call once per tick
+tick   	    	extern
+
+
+;  This structure represents a logical connection
+;  'conn' points to one of these
+	.area	.conn,constant
+C_FLG		rmb	1	; flags/type
+C_DIP		rmb	4	; dest ip address
+C_SPORT 	rmb	2	; src port
+C_DPORT		rmb	2	; dest sport
+C_CALL		rmb	2	; callback vector
+C_TIME		rmb	2	; timer
+C_SIZE		equ	*	; size of this struct
+	
+C_UDP		equ	1
+
+; these status codes are sent to callback functon
+; to indicate what's going on...
+C_CALLTO	equ	0       ; timeout
+C_CALLRX	equ	1	; rx data
+
+
+
+;; fixme: for debugging
+tab	        extern

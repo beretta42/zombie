@@ -1,0 +1,7 @@
+TODO:
+
+* decide if data section should be PCR or what?
+* how to route incoming packet to correct sockets for listening vs. connections
+* put stack in its own context
+
+

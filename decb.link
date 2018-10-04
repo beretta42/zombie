@@ -1,0 +1,4 @@
+section .code load 0e00
+section .data
+entry start
+
