@@ -9,6 +9,8 @@ Zombie TODO:
 * design the zombie protocol
 * after PIC implement ability to move system at run-time, or
   give the master enough info to do it. (where are you at?)
+     - problem: call backs will have to be updated
+     - interrupt vector will have to be updated
 * Local announcements
 * a unix boot server
 * ROM!
