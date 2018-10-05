@@ -46,6 +46,10 @@ start	orcc	#$50		; turn off interrupts
 	lds	#stacke
 	jsr	ip6809_init	; initialize system
 	jsr	dev_init	; init device
+	ldx	#$600		; add a buffer to freelist
+	jsr	freebuff	;
+	ldx	#$800
+	jsr	freebuff
 	andcc	#~$10		; turn on irq interrupt
 	ldx	#ipmask
 	jsr	ip_setmask
@@ -92,14 +96,7 @@ t1@	ldb	,y+
 	ldd	#call
 	std	C_CALL,x
 	;; do main loop
-a@	jsr	dev_poll
-	bcs	p1@		; nothing there so pause
-	ldx	inbuf
-	jsr	eth_in		; process via ethernet
-	bra	a@
-p1@	ldd	#7
-	jsr	pause
-	bra	a@
+a@	bra	a@
 error	inc	$501
 	bra	a@
 s0@	fcn	"Hello, from Brett's CoCo"
