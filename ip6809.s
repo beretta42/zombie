@@ -13,7 +13,10 @@ bufs	rmb	2*MAXBUF	; free buffer stack space
 fptr	rmb	2		; free buffer stack pointer
 fno	rmb	1		; number of buffer on free list
 	
-conn	.dw	0
+conn	.dw	0		; working socket
+
+time	.db	7		; polling pause timer
+itime	.db	7		; pause this much time after empty polls
 	
 	.area	.code
 
@@ -108,14 +111,15 @@ close   clr    [conn]	; exciting!
 
 ;;; call this every tick
         export tick
-tick	ldx    conn
-	pshs   x		; save connection
+tick	ldy    conn
+	ldx    inbuf		; push current working socket
+	pshs   x,y
 	;; iterate through each socket
 	;; decrementing timer, and calling it's callback
 	;; if zero
 	jsr    for_sock
 a@	jsr    next_sock
-	bcs    out@
+	bcs    poll@		; fixme: or should we goto poll?
 	ldx    conn
 	ldd    C_TIME,x
 	beq    a@
@@ -127,8 +131,24 @@ a@	jsr    next_sock
 	ldb    #C_CALLTO
 	jsr    ,y
 	bra    a@
-out@	puls   x
-	stx    conn
+	;; poll device
+poll@	dec    time		; decrement poll timer
+	bne    out@
+	jsr    getbuff		; set buffer to new one
+	bcs    out@
+	stx    inbuf
+b@	jsr    dev_poll
+	bcs    p@
+	ldx    inbuf
+	jsr    eth_in
+	bra    b@
+p@	ldx    inbuf
+	jsr    freebuff
+	ldb    itime		; reset pause timer
+	stb    time
+out@	puls   x,y
+	stx    inbuf
+	sty    conn
 	rts
 
 
