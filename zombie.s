@@ -4,9 +4,6 @@
 	export  insize
 	export  inmax
 	export  inbuf
-	export	time
-	export	pause
-
 
 	.area	.data
 insize	.dw	0		; size of packet in input buffer
