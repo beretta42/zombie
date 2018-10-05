@@ -65,6 +65,15 @@ next_sock	extern
 resolve		extern
 ans		extern
 
+
+; frees a buffer
+;   takes: X = ptr
+freebuff	extern
+
+; allocates a buffer
+;   returns: X = ptr, C set on error
+getbuff	        extern
+
 ; initialize the system
 ip6809_init	extern
 
