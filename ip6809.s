@@ -13,10 +13,10 @@ bufs	rmb	2*MAXBUF	; free buffer stack space
 fptr	rmb	2		; free buffer stack pointer
 fno	rmb	1		; number of buffer on free list
 	
-conn	.dw	0		; working socket
+conn	rmb	2		; working socket
 
-time	.db	7		; polling pause timer
-itime	.db	7		; pause this much time after empty polls
+time	rmb	1		; polling pause timer
+itime	rmb	1		; pause this much time after empty polls
 	
 	.area	.code
 
@@ -66,6 +66,10 @@ ip6809_init
 	ldd    	 #fptr
 	std	 fptr
 	clr	 fno
+	;; reset our pol timer
+	ldb	#7		; fixme: should be set by something else?
+	stb	itime
+	stb	time
 	;; init subsystems
 	jsr	 udp_init
 	rts

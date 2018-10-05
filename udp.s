@@ -9,11 +9,9 @@
 	export pdulen
 
 	.area .data
-*sport	.dw	68
-*dport	.dw	67
-pdu	.dw	0		; pdu address of received packet
-pdulen	.dw	0		; pdu length of received packet
-eport	.dw	$c000		; ephemeral port number
+pdu	rmb	2		; pdu address of received packet
+pdulen	rmb	2		; pdu length of received packet
+eport	rmb	2		; next ephemeral port number
 	
 	.area .code
 
