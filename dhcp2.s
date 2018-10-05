@@ -121,7 +121,8 @@ server@	pshs	b
 	
 	
 request
-	ldx	inbuf
+	jsr	getbuff
+	pshs	x
 	leax	47,x
 	pshs	x
 	jsr	header
@@ -147,7 +148,8 @@ request
 	bra	mysend
 
 discover
-	ldx	inbuf
+	jsr	getbuff
+	pshs	x
 	leax	47,x
 	pshs	x
 	jsr	header
@@ -165,6 +167,8 @@ mysend
 	subd	,s
 	puls	x
 	jsr	udp_out2
+	puls	x
+	jsr	freebuff
 	rts
 
 header
@@ -214,20 +218,12 @@ poll	ldb	#4		; set retransmits to 4 then fail
 	clr	flag            ; clear return flag
 	;; loop processing packets until the flag is set
 a@	tst	flag
-	bne	out@
-	jsr	dev_poll
-	bcs	p@
-	ldx	inbuf
-	jsr	eth_in
-	bra	a@
-p@	ldd	#7		; wait before polling DW server again
-	jsr	pause		; fixme: app shouldn't know about DW
-	bra	a@
-out@	lda	#1
+	beq	a@
+	lda	#1
 	cmpa	flag
 	rts
 
-
+	export	cb_offer
 cb_offer
 	cmpb	#C_CALLTO
 	beq	to@

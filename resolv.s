@@ -22,6 +22,7 @@ flag	rmb	1		;
 resolve
 	ldb	#3
 	stb	retry
+	clr	flag
 	;; make and bind socket - DNS
 	ldb	#C_UDP	 	; socket is a UDP
 	jsr	socket
@@ -38,28 +39,21 @@ resolve
 	ldd	#call		; "call" is our callback (below)
 	std	C_CALL,x
 	jsr	query		; send initial query
-a@	jsr	dev_poll	; and poll loop
-	bcs	p1@
-	ldx	inbuf
-	jsr	eth_in
-	ldb	flag
-	bne	out@
-	bra	a@
-p1@	ldd	#7
-	jsr	pause
-	bra	a@
-bad@	coma
-	rts
+a@	tst	flag
+	beq	a@
 out@	jsr	close
 	ldb	#1
 	cmpb	flag
+	rts
+bad@	coma
 	rts
 
 
 	export	query
 ;; send query packet to server
-query
-	ldx	inbuf		; fixme: we shouldn't know about this
+query 
+	jsr	getbuff
+	pshs	x
 	leax	47,x		; leave room for lower layer
 	pshs	x
 	ldd	mac+2		; use our mac as a ID field
@@ -81,7 +75,9 @@ query
 	tfr	x,d		; calc length
 	subd	,s
 	puls	x		; get pdu back
-	jsr	send		
+	jsr	send
+	puls	x
+	jsr	freebuff
 	rts
 
 name	fcn	"www.play-classics.net"
