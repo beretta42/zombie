@@ -1,7 +1,23 @@
 TODO:
 
 * decide if data section should be PCR or what?
-* how to route incoming packet to correct sockets for listening vs. connections
-* put stack in its own context
+* what evil shall we do with dhcp option "file" ?
 
+Zombie TODO:
+
+* code the zombie protocol
+* design the zombie protocol
+* after PIC implement ability to move system at run-time, or
+  give the master enough info to do it. (where are you at?)
+* Local announcements
+* a unix boot server
+* ROM!
+* a unix proglet to write settings: hw address, IP settings, boot options
+
+Network Stack:
+
+* put stack in its own context
+* how to route incoming packet to correct sockets for listening vs. connections
+* TCP
+* TCP done up to simple tcp bridges
 
