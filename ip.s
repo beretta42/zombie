@@ -135,6 +135,8 @@ cont@	ldd	12,x		; save source ip for use later
 	lbeq	udp_in		; go processes udp
 	cmpa	#1		; is icmp?
 	lbeq	icmp_in		; go answer ping
+	cmpa	#6		; is tcp?
+	lbeq	tcp_in		; go process tcp
 	bra	drop
 
 

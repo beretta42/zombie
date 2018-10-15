@@ -1,5 +1,11 @@
 	include "zombie.def"
 
+	import	tcp_connect
+	import	tcp_send
+	import	tcp_close
+	import  tcp_recv
+
+	
 	export	start
 	export  insize
 	export  inmax
@@ -10,6 +16,7 @@ insize	.dw	0		; size of packet in input buffer
 inbuf	.dw	$600		; pointer to input buffer
 inmax	.dw	$200		; max size of input buffer
 
+buf	rmb	80
 stack	rmb	256		; a private stack
 stacke		
 	
@@ -47,16 +54,19 @@ start	orcc	#$50		; turn off interrupts
 	jsr	freebuff	;
 	ldx	#$800
 	jsr	freebuff
+	ldx	#$a00
+	jsr	freebuff
 	andcc	#~$10		; turn on irq interrupt
 	ldx	#ipmask
 	jsr	ip_setmask
 	;; dhcp
 	jsr	dhcp_init
-	bcs	error
+	lbcs	error
 	inc	$500
 	;; send some data
 	jsr	resolve
 	inc	$501
+	bra	test
 	;; send a upd packet to server
 	ldb	#C_UDP
 	jsr	socket
@@ -84,8 +94,32 @@ t1@	ldb	,y+
 	puls	d,x
 	jsr	send
 	jsr	close
+	;; do a tcp
+test	ldb	#C_TCP
+	jsr	socket
+	ldx	conn
+	ldd	#6999
+	std	C_DPORT,x
+	ldd	ans
+	std	C_DIP,x
+	ldd	ans+2
+	std	C_DIP+2,x
+	jsr	tcp_connect
+	bcs	b@
+	ldx	#buf
+	jsr	tcp_recv
+	clr	d,x
+	leax	-1,x
+	jsr	$b99c
+	ldx	#s0@
+	ldd	#24
+	jsr	tcp_send
+	ldx	#s1@
+	ldd	#24
+	jsr	tcp_send
+	jsr	tcp_close
 	;; setup a socket
-	ldb	#C_UDP
+b@	ldb	#C_UDP
 	jsr	socket
 	ldx	conn
 	ldd	#6809
@@ -97,12 +131,14 @@ a@	bra	a@
 error	inc	$501
 	bra	a@
 s0@	fcn	"Hello, from Brett's CoCo"
-	
+s1@	fcn	"This is the next message"	
 
 ;; a test callback
 ;; just print the udp's data as a string
 call
 	ldx	pdu
+	ldd	pdulen
+	clr	d,x
 	leax	-1,x
 	jsr	$b99c
 	inc	$520

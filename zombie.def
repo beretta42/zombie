@@ -47,6 +47,9 @@ dport		extern
 pdu		extern
 pdulen		extern
 
+tcp_in		extern
+tcp_init	extern
+
 icmp_in		extern
 
 insize		extern
@@ -64,6 +67,9 @@ next_sock	extern
 
 resolve		extern
 ans		extern
+
+rand		extern
+lfsr		extern
 
 
 ; frees a buffer
@@ -108,9 +114,20 @@ C_SPORT 	rmb	2	; src port
 C_DPORT		rmb	2	; dest sport
 C_CALL		rmb	2	; callback vector
 C_TIME		rmb	2	; timer
+;; these fields are used for TCP
+C_SNDN		rmb	4	; sequence of next byte to be sent
+C_RCVN		rmb	4	; sequence of next byte to be recv
+C_SNDB		rmb	2	; buffer address of send data
+C_SNDZ		rmb	2	; size of data in send buffer
+C_RCVB		rmb	2	; receive packet buffer
+C_RCVD		rmb	2	; ptr to data in buffer
+C_RCVZ		rmb	2	; size of received packet
+C_TFLG		rmb	1	; flags
+C_TFLG2		rmb	1	; more flag
 C_SIZE		equ	*	; size of this struct
 	
 C_UDP		equ	1
+C_TCP		equ	2
 
 ; these status codes are sent to callback functon
 ; to indicate what's going on...

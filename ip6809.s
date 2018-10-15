@@ -1,12 +1,14 @@
 	include "zombie.def"
 
 	export	conn
-	export	tab	
+	export	tab
+	export  rand
+	export  lfsr
 	
 	.area	.data
 MAXBUF	equ	1		; fixme: defined by application
 	;; a array of connections/sockets
-tab	rmb	C_SIZE*8
+tab	rmb	C_SIZE*6
 tabe
 	;; a free list of packet buffers
 bufs	rmb	2*MAXBUF	; free buffer stack space
@@ -17,6 +19,8 @@ conn	rmb	2		; working socket
 
 time	rmb	1		; polling pause timer
 itime	rmb	1		; pause this much time after empty polls
+
+rand	rmb	2		; random number
 	
 	.area	.code
 
@@ -58,20 +62,24 @@ err@	puls	cc
 ;;; init stack
 	export	ip6809_init
 ip6809_init
+	;; set random number seed
+	ldd     #42
+	std	rand
 	;; clear socket/connection table
-	ldy	 #tab
-	ldb	 #tabe-tab
-	jsr	 memclr
+	ldy	#tab
+	ldb	#tabe-tab
+	jsr	memclr
 	;; init our data area
-	ldd    	 #fptr
-	std	 fptr
-	clr	 fno
+	ldd    	#fptr
+	std	fptr
+	clr	fno
 	;; reset our pol timer
 	ldb	#7		; fixme: should be set by something else?
 	stb	itime
 	stb	time
 	;; init subsystems
 	jsr	 udp_init
+	jsr	 tcp_init
 	rts
 
 ;;; get a socket
@@ -115,7 +123,8 @@ close   clr    [conn]	; exciting!
 
 ;;; call this every tick
         export tick
-tick	ldy    conn
+tick	jsr    lfsr
+	ldy    conn
 	ldx    inbuf		; push current working socket
 	pshs   x,y
 	;; iterate through each socket
@@ -182,3 +191,14 @@ ns1	leax	C_SIZE,x
 nf@	coma
 	puls	x,pc
 
+
+
+;; tick LFSR
+lfsr
+	ldd	rand
+	lsra
+	rorb
+	bcc	a@
+	eora	#$b4
+a@	std	rand
+	rts
