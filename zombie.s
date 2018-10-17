@@ -16,13 +16,14 @@ insize	.dw	0		; size of packet in input buffer
 inbuf	.dw	$600		; pointer to input buffer
 inmax	.dw	$200		; max size of input buffer
 
-buf	rmb	80
 stack	rmb	256		; a private stack
 stacke		
 	
 time	.dw	0		; a ticker
 	
 	.area	.code
+
+server	fcn	"play-classics.net"
 
 ;;; pause
 ;;;   takes D = time in jiffies to wait
@@ -50,7 +51,7 @@ start	orcc	#$50		; turn off interrupts
 	lds	#stacke
 	jsr	ip6809_init	; initialize system
 	jsr	dev_init	; init device
-	ldx	#$600		; add a buffer to freelist
+	ldx	#$600		; add a buffers to freelist
 	jsr	freebuff	;
 	ldx	#$800
 	jsr	freebuff
@@ -63,85 +64,116 @@ start	orcc	#$50		; turn off interrupts
 	jsr	dhcp_init
 	lbcs	error
 	inc	$500
-	;; send some data
+	;; lookup server
+	ldx	#server
 	jsr	resolve
-	inc	$501
-	bra	test
-	;; send a upd packet to server
+	;; setup a socket
 	ldb	#C_UDP
 	jsr	socket
 	ldx	conn
-	ldd	#6999
-	std	C_DPORT,x
-	ldd	ans
-	std	C_DIP,x
-	ldd	ans+2
-	std	C_DIP+2,x
-	ldx	inbuf
-	leax	47,x
-	pshs	x
-	ldy	#s0@
-t1@	ldb	,y+
-	stb	,x+
-	bne	t1@
-	tfr	x,d
-	subd	,s
-	ldx	,s++
-	pshs	d,x
-	jsr	send
-	ldd	#4*60
-	jsr	pause
-	puls	d,x
-	jsr	send
-	jsr	close
-	;; do a tcp
-test	ldb	#C_TCP
-	jsr	socket
-	ldx	conn
-	ldd	#6999
-	std	C_DPORT,x
-	ldd	ans
-	std	C_DIP,x
-	ldd	ans+2
-	std	C_DIP+2,x
-	jsr	tcp_connect
-	bcs	b@
-	ldx	#buf
-	jsr	tcp_recv
-	clr	d,x
-	leax	-1,x
-	jsr	$b99c
-	ldx	#s0@
-	ldd	#24
-	jsr	tcp_send
-	ldx	#s1@
-	ldd	#24
-	jsr	tcp_send
-	jsr	tcp_close
-	;; setup a socket
-b@	ldb	#C_UDP
-	jsr	socket
-	ldx	conn
-	ldd	#6809
+	ldd	#0		; source port is ephemeral
 	std	C_SPORT,x
-	ldd	#call
+	ldd	#6999		; dest port 6999
+	std	C_DPORT,x
+*	ldd	#$ffff
+	ldd	ans
+	std	C_DIP,x		; destination IP
+	ldd	ans+2
+	std	C_DIP+2,x
+	ldd	#call		; attach a callback
 	std	C_CALL,x
+	;; send a boot announcement twice...
+	;; (ARP may eat the first one!)
+	jsr	getbuff		; X = new buffer
+	leax	47,x		; pad for lower layers (DW+ETH+IP+UDP)
+	pshs	x
+	ldd	#0
+	sta	0,x		; message type
+	std	1,x		; XID
+	std	3,x		; address
+	std	5,x		; size
+	ldd	#7		; size of PDU
+	jsr	udp_out2
+	ldd	#30
+	jsr	pause
+	puls	x
+	ldd	#7
+	jsr	udp_out2
+	ldx	inbuf
+	jsr	freebuff
 	;; do main loop
 a@	bra	a@
 error	inc	$501
 	bra	a@
-s0@	fcn	"Hello, from Brett's CoCo"
-s1@	fcn	"This is the next message"	
 
-;; a test callback
+;; callback for received datagrams
 ;; just print the udp's data as a string
 call
 	ldx	pdu
-	ldd	pdulen
-	clr	d,x
-	leax	-1,x
-	jsr	$b99c
-	inc	$520
+	ldb	,x
+	cmpb	#1	; is read ?
+	beq	cmd_read
+	cmpb	#2	; is write?
+	beq	cmd_write
+	cmpb	#3	; is execute?
+	beq	cmd_exec
+	ldx	inbuf
+	jsr	freebuff
 	rts
 
+cmd_read
+	bsr	cmd_reply
+	ldy	5,x
+	ldu	3,x
+	leax	7,x
+a@	ldb	,u+
+	stb	,x+
+	leay	-1,y
+	bne	a@
+	tfr	x,d
+	subd	pdu
+	ldx	pdu
+	jsr	udp_out2
+	export debug
+debug
+	ldx	inbuf
+	jmp	freebuff
+
+cmd_write
+	bsr	cmd_reply
+	ldy	5,x
+	ldu	3,x
+	leax	7,x
+a@	ldb	,x+
+	stb	,u+
+	leay	-1,y
+	bne	a@
+	tfr	x,d
+	subd	pdu
+	ldx	pdu
+	jsr	udp_out2
+	ldx	inbuf
+	jmp	freebuff
+
+cmd_exec
+	bsr	cmd_reply
+	ldx	3,x
+	pshs	x
+	ldd	pdulen
+	ldx	pdu
+	jsr	udp_out2
+	ldx	inbuf
+	jsr	freebuff
+	jmp	[,s]
+
+cmd_reply
+	ldy	conn
+	ldb	,x
+	orb	#$80		; change to reply
+	stb	,x
+	ldd	ripaddr		; send to host we've recv'd command from
+	std	C_DIP,y
+	ldd	ripaddr+2
+	std	C_DIP+2,y
+	rts
 
