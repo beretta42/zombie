@@ -226,6 +226,59 @@ void send_poke(void)
 	 sizeof(struct sockaddr_in));
 }
 
+
+void send_exec(void)
+{
+  int a;
+  int x;
+  int ret;
+  uint8_t *p;
+  char *s;
+  struct timeval tm;
+  int retry = 3;
+
+  s = strtok(NULL, WS);
+  if (!s){
+    fprintf(stderr, "error: address expected\n");
+    return;
+  }
+  a = strtol(s, NULL, 16);
+  a &= 0xffff;
+  memset(obuf, 0, BUFLEN);
+  p = obuf;
+  *p++ = MT_EXEC;
+  *p++ = 0;
+  *p++ = 0;
+  *p++ = a >> 8;
+  *p++ = a & 0xff;
+  *p++ = 0;
+  *p++ = 0;
+  while (retry--) {
+    sendto(sd,obuf, p - obuf, 0,
+	   (struct sockaddr *)&db[conn].addr,
+	   sizeof(struct sockaddr_in));
+    tm.tv_sec = 1;
+    tm.tv_usec = 0;
+    ret = setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &tm, sizeof(struct timeval));
+    x = sizeof(struct sockaddr_in);
+    ret = recvfrom(sd,buf,BUFLEN,0,
+		   (struct sockaddr *)&raddr, &x);
+    // todo: add announcements here
+    if (ret < 0){
+      if (errno == EAGAIN){
+	continue;
+      }
+      perror("recv");
+      exit(1);
+    }
+    if ((buf[0] & MT_MASK) == MT_EXEC){
+      printf("ok\n");
+      return;
+    }
+  }
+  fprintf(stderr, "error: command timeout.\n");
+}
+
 /* process user input */
 void input(void)
 {
@@ -239,6 +292,7 @@ void input(void)
   else if (!strcmp(ptr,"connect")) { do_connect(); return; }
   else if (!strcmp(ptr,"dump")) { send_dump(); return; }
   else if (!strcmp(ptr,"poke")) { send_poke(); return; }
+  else if (!strcmp(ptr,"exec")) { send_exec(); return; }
   else if (!strcmp(ptr,"exit")) exit(1);
   else if (!strcmp(ptr,"quit")) exit(1);
   else
