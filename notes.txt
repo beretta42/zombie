@@ -23,3 +23,38 @@ Network Stack:
 * TCP
 * TCP done up to simple tcp bridges
 
+
+
+zombie protocol:
+
+UDP
+assume one master, and multiple slaves
+slave sits on UDP 6999 listening for commands
+announce a coco booting via message type (0x00), and possible retransmit?
+
+message types:
+
+announce  0x00   - announce coco's presence
+read      0x01	 - request a read of memory
+write     0x02   - request a write of memory
+exec	  0x03   - execute memory**
+
+flags:    0x80   - 0 if command, 1 if response
+
+UDP datagram layout:
+
+offset   size    what
+0	 1	 message type / flags
+1	 2	 XID
+3	 2	 data address
+5	 2	 data size
+7	 ??      data
+
+
+** on reception of execute memory, the slave will send confirmation
+   packet out to master *before* executing memory.
+
+protocol runs lock-step, and master will retransmit commands if it
+doesn't receive a response in a timely (TBD) fashion.  The slave keeps
+track of the last received XID, and will retransmit it received again.
+This means the master must new XID for each new command.
