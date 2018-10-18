@@ -8,6 +8,7 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <time.h>
 #include <errno.h>
 
 #define WS      " \n\t"
@@ -28,10 +29,12 @@ struct db_entry {
   int flag;
   struct sockaddr_in addr;
   int cap;
+  time_t time;
 };
 
 #define DF_EMPTY 0
 #define DF_USED  1
+#define DF_IFFY  2
 
 #define MT_ANN   0
 #define MT_READ  1
@@ -73,6 +76,8 @@ void db_add(struct sockaddr_in *addr)
   for (x = 0; x < DBNUM; x++){
     if (db[x].flag != DF_EMPTY &&
 	db[x].addr.sin_addr.s_addr == addr->sin_addr.s_addr) {
+      db[x].time = time(NULL) + 15;
+      db[x].flag = DF_USED;
       return;
     }
   }
@@ -82,6 +87,7 @@ void db_add(struct sockaddr_in *addr)
       db[x].flag = DF_USED;
       memcpy(&db[x].addr, addr, sizeof(struct sockaddr_in));
       db[x].cap = 0;
+      db[x].time = time(NULL) + 15;
       return;
     }
   }
@@ -95,11 +101,11 @@ void db_list(void)
   int x;
   for (x = 0; x < DBNUM; x++) {
     if (db[x].flag != DF_EMPTY){
-      printf("%c[%d] %s\n", x == conn ? '*' : ' ',
+      printf("%c[%d] %s ", x == conn ? '*' : ' ',
 	     x, inet_ntoa(db[x].addr.sin_addr) );
+      printf("%c\n", (db[x].flag == DF_IFFY) ? '?' : ' ');
     }
   }
-  printf("\n");
 }
 
 
@@ -218,7 +224,7 @@ int send_exec(uint16_t addr){
 
 
 /* disassemble memory */
-void send_dasm(void)
+void do_dasm(void)
 {
   int x;
   uint8_t *p;
@@ -257,15 +263,21 @@ void send_dasm(void)
   }
 }
 
+uint8_t printable(uint8_t c)
+{
+  if ( c < 0x20 || c > 0x7e ) return '.';
+  return c;
+}
 
 /* dump memory from our target client */
-void send_dump(void)
+void do_dump(void)
 {
   int x;
   uint8_t *p;
   int ret;
   int l;
   int i;
+  int j;
   
   
   p = strtok(NULL,WS);
@@ -285,17 +297,24 @@ void send_dump(void)
     fprintf(stderr,"error:command timeout.\n");
     return;
   }
-  for(i = 0; i < l; i++){
-    if (!(i % 16)){
+  for (j = 0; j < l; j += 16) {
       printf("\n%.4x  ", x);
-      x += 16;
-    }
-    printf("%.2x ", tbuf[i]);
+      x = (x + 16) & 0xffff;
+      for (i = 0; i < 16; i++){
+	if (j+i < l)
+	  printf("%.2x ", tbuf[j+i]);
+	else
+	  printf("   ");
+      }
+      for (i = 0; i < 16; i++){
+	if (j+i < l)
+	  printf("%c", printable(tbuf[j+i]));
+      }
   }    
   printf("\n");
 }
 
-void send_poke(void)
+void do_poke(void)
 {
   int a;
   int x;
@@ -348,6 +367,21 @@ void do_exec(void)
 }
 
 
+void do_reboot(void)
+{
+  uint8_t c[2] = { 0, 0 };
+  uint16_t *a = (uint16_t *)c;
+  if (
+      send_write( c, 0x71, 1) ||
+      send_read( c, 0xfffe, 2) ||
+      send_exec(ntohs(*a))
+      ) {
+    fprintf(stderr,"error: command timeout\n");
+    return;
+  }
+  printf("ok\n");
+}
+
 /* process user input */
 void input(void)
 {
@@ -359,10 +393,11 @@ void input(void)
   if (*ptr == '\n') return;
   if (!strcmp(ptr,"list")) { db_list(); return; }
   else if (!strcmp(ptr,"connect")) { do_connect(); return; }
-  else if (!strcmp(ptr,"dump")) { send_dump(); return; }
-  else if (!strcmp(ptr,"poke")) { send_poke(); return; }
+  else if (!strcmp(ptr,"dump")) { do_dump(); return; }
+  else if (!strcmp(ptr,"poke")) { do_poke(); return; }
   else if (!strcmp(ptr,"exec")) { do_exec(); return; }
-  else if (!strcmp(ptr,"dasm")) { send_dasm(); return; }
+  else if (!strcmp(ptr,"dasm")) { do_dasm(); return; }
+  else if (!strcmp(ptr,"reboot")) { do_reboot(); return; }
   else if (!strcmp(ptr,"exit")) exit(1);
   else if (!strcmp(ptr,"quit")) exit(1);
   else
@@ -386,6 +421,24 @@ void input_net(void)
   }
 }
 
+/* check the status of clients */
+void process_time(void)
+{
+  uint8_t c;
+  int x;
+  for (x = 0; x < DBNUM; x++){
+    if (db[x].flag != DF_EMPTY && time(NULL) > db[x].time){
+      if (send_read(&c, 0, 1)){
+	if (db[x].flag == DF_IFFY) {
+	  db[x].flag = DF_EMPTY;
+	  continue;
+	}
+	db[x].flag = DF_IFFY;
+      }
+      db[x].time = time(NULL) + 15;
+    }
+  }
+}
 
 
 int main(int argc, char *argv[])
@@ -393,6 +446,7 @@ int main(int argc, char *argv[])
   int ret;
   int x;
   fd_set set;
+  struct timeval tv;
 
   for (x=0; x<16; x++){
     db[x].flag = DF_EMPTY;
@@ -420,7 +474,13 @@ int main(int argc, char *argv[])
     FD_ZERO(&set);
     FD_SET(0,&set);
     FD_SET(sd,&set);
-    ret = select(sd+1, &set, NULL, NULL, NULL);
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    ret = select(sd+1, &set, NULL, NULL, &tv);
+    if (ret == 0){
+      process_time();
+      continue;
+    }
     if (ret < 0){
       perror("select");
       exit(1);
