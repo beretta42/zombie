@@ -1,4 +1,4 @@
-all: zombie.dsk
+all: zombie.dsk server
 
 AS = lwasm
 ASFLAGS = -f obj 
@@ -17,6 +17,9 @@ zombie.dsk: zombie.bin
 	decb copy -2 -b zombie.bin zombie.dsk,ZOMBIE.BIN
 	decb copy -l -0 -a AUTOEXEC.BAS zombie.dsk,AUTOEXEC.BAS
 
+server:
+	make -C master all
+
 clean:
 	rm -f *~ zombie.bin zombie.dsk zombie.map *.o
-
+	make -C master clean
