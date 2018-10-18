@@ -21,6 +21,7 @@ struct sockaddr_in laddr;
 struct sockaddr_in raddr;
 uint8_t buf[BUFLEN];
 uint8_t obuf[BUFLEN];
+uint8_t tbuf[BUFLEN];
 uint8_t lbuf[LBUFLEN];
 
 struct db_entry {
@@ -44,6 +45,24 @@ struct db_entry {
 struct db_entry db[DBNUM];
 
 int conn = -1;
+
+#define ARGBYTE(address) dasmb(address)
+#define ARGWORD(address) dasmw(address)
+#define OPCODE(address) dasmb(address)
+
+uint16_t base;
+
+uint8_t dasmb(uint16_t add)
+{
+  return tbuf[add-base];
+}
+
+uint16_t dasmw(uint16_t add)
+{
+  return (tbuf[add-base] << 8) | (tbuf[add-base+1]);
+}
+
+#include "dasm09.h"
 
 
 /* Add a client to the database */
@@ -115,30 +134,98 @@ void do_connect(void)
   conn = x;
 }
 
-void do_dump(void)
-{
-  int x;
-  uint8_t *ptr;
-  uint16_t addr = ntohs(*(uint16_t *)(buf + 3));
-  uint16_t len =  ntohs(*(uint16_t *)(buf + 5));
-  for(x = 0; x < len; x++){
-    if (!(x % 16)){
-      printf("\n%.4x  ", addr);
-      addr += 16;
-    }
-    printf("%.2x ", buf[x+7]);
-  }    
-  printf("\n");
-}
 
-/* dump memory from our target client */
-void send_dump(void)
+/* send a packet and wait for matching answer */
+/*   flag = packet type to wait for */
+/*   returns -1 on error, 0 ok. */
+int send_trans(int len, int flag)
 {
-  int x;
-  char *p;
-  int ret;
   struct timeval tm;
   int retry = 3;
+  int ret;
+  int x;
+  
+  while (retry--) {
+    sendto(sd,obuf,len,0,
+	   (struct sockaddr *)&db[conn].addr,
+	   sizeof(struct sockaddr_in));
+    tm.tv_sec = 1;
+    tm.tv_usec = 0;
+    ret = setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &tm, sizeof(struct timeval));
+    x = sizeof(struct sockaddr_in);
+    ret = recvfrom(sd,buf,BUFLEN,0,
+		   (struct sockaddr *)&raddr, &x);
+    // todo: add announcements here
+    if (ret < 0){
+      if (errno == EAGAIN){
+	continue;
+      }
+      perror("recv");
+      exit(1);
+    }
+    if ((buf[0] & MT_MASK) == flag)
+      return 0;
+  }
+  return -1;
+}
+
+
+int send_read(uint8_t *abuf, uint16_t addr, uint16_t len) {
+  uint8_t *p = obuf;
+  memset(obuf, 0, BUFLEN);
+  *p++ = MT_READ;
+  *p++ = 0;
+  *p++ = 0;
+  *p++ = addr >> 8;
+  *p++ = addr & 0xff;
+  *p++ = len >> 8;
+  *p++ = len & 0xff;
+  if (send_trans(p - obuf, MT_READ))
+    return -1;
+  memcpy(abuf, buf + 7, len);
+  return 0;
+}
+
+int send_write(uint8_t *abuf, uint16_t addr, uint16_t len) {
+  uint8_t *p = obuf;
+  memset(obuf, 0, BUFLEN);
+  *p++ = MT_WRITE;
+  *p++ = 0;
+  *p++ = 0;
+  *p++ = addr >> 8;
+  *p++ = addr & 0xff;
+  *p++ = len >> 8;
+  *p++ = len & 0xff;
+  memcpy(p, abuf, len);
+  p += len;
+  if (send_trans(p - obuf, MT_WRITE))
+    return -1;
+  return 0;
+}
+
+int send_exec(uint16_t addr){
+  uint8_t *p = obuf;
+  memset(obuf, 0, BUFLEN);
+  *p++ = MT_EXEC;
+  *p++ = 0;
+  *p++ = 0;
+  *p++ = addr >> 8;
+  *p++ = addr & 0xff;
+  *p++ = 0;
+  *p++ = 0;
+  return send_trans(p - obuf, MT_EXEC);
+}
+
+
+/* disassemble memory */
+void send_dasm(void)
+{
+  int x;
+  uint8_t *p;
+  int ret;
+  char d[80];
+  int l;
+  int i;
   
   p = strtok(NULL,WS);
   if (!p) {
@@ -150,38 +237,62 @@ void send_dump(void)
     fprintf(stderr,"error: number out of range.\n");
     return;
   }
-  memset(obuf, '\0', BUFLEN);
-  p = obuf;
-  *p++ = MT_READ;
-  *p++ = 0;
-  *p++ = 0;
-  *p++ = x >> 8;
-  *p++ = x & 0xff;
-  *p++ = 0;
-  *p++ = 0x80;
-  while (retry--) {
-    sendto(sd,obuf,7,0,
-	   (struct sockaddr *)&db[conn].addr,
-	   sizeof(struct sockaddr_in));
-    tm.tv_sec = 1;
-    tm.tv_usec = 0;
-    ret = setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &tm, sizeof(struct timeval));
-    x = sizeof(struct sockaddr_in);
-    ret = recvfrom(sd,buf,BUFLEN,0,
-		   (struct sockaddr *)&raddr, &x);
-    // todo: add announcements here
-    if (ret < 0){
-      if (errno == EAGAIN){
-	continue;
-      }
-      perror("recv");
-      exit(1);
-    }
-    if ((buf[0] & MT_MASK) == MT_READ){
-      do_dump();
-      return;
-    }
+  p = strtok(NULL, WS);
+  l = p ? strtol(p,NULL,16) : 0x30; 
+  if (send_read(tbuf, x, l)){
+    fprintf(stderr,"error: command timeout.\n");
+    return;
   }
+  base = x;
+  while (x < l + base){
+    printf("%.4x  ", x);
+    i = ret = Dasm(d,x);
+    for (i = 0; i < ret; i++)
+      printf("%.02x", dasmb(x+i));
+    i = 4 - ret;
+    while(i--)
+	  printf("  ");
+    x += ret;
+    printf(" %s\n",d);
+  }
+}
+
+
+/* dump memory from our target client */
+void send_dump(void)
+{
+  int x;
+  uint8_t *p;
+  int ret;
+  int l;
+  int i;
+  
+  
+  p = strtok(NULL,WS);
+  if (!p) {
+    fprintf(stderr,"error: address expected.\n");
+    return;
+  }
+  x = strtol(p, NULL, 16);
+  if (x < 0 || x >= 65536) {
+    fprintf(stderr,"error: number out of range.\n");
+    return;
+  }
+  p = strtok(NULL,WS);
+  l = p ? strtol(p,NULL,16) : 0x40;
+  
+  if (send_read(tbuf, x, l)){
+    fprintf(stderr,"error:command timeout.\n");
+    return;
+  }
+  for(i = 0; i < l; i++){
+    if (!(i % 16)){
+      printf("\n%.4x  ", x);
+      x += 16;
+    }
+    printf("%.2x ", tbuf[i]);
+  }    
+  printf("\n");
 }
 
 void send_poke(void)
@@ -190,7 +301,7 @@ void send_poke(void)
   int x;
   int l;
   int len = 0;
-  uint8_t *p;
+  uint8_t *p=tbuf;
   char *s;
 
   s = strtok(NULL, WS);
@@ -200,42 +311,27 @@ void send_poke(void)
   }
   a = strtol(s, NULL, 16);
   a &= 0xffff;
-  memset(obuf, 0, BUFLEN);
-  p = obuf;
-  *p++ = MT_WRITE;
-  *p++ = 0;
-  *p++ = 0;
-  *p++ = a >> 8;
-  *p++ = a & 0xff;
-  p +=2;
   while (1){
     s = strtok(NULL, WS);
     if (!s) break;
-    x = strtol(s, NULL, 16);
+    x = strtol(s,NULL, 16);
     *p++ = x & 0xff;
     l++;
   }
-  if (!l ) {
-    fprintf(stderr, "error: expecting at least one hex byte\n");
+  if (send_write(tbuf,a,l)){
+    fprintf(stderr,"error: command timeout\n");
     return;
-  }	    
-  obuf[5] = l >> 8;
-  obuf[6] = l & 0xff;
-  sendto(sd,obuf, p - obuf, 0,
-	 (struct sockaddr *)&db[conn].addr,
-	 sizeof(struct sockaddr_in));
+  }
+  printf("ok\n");
 }
 
 
-void send_exec(void)
+void do_exec(void)
 {
   int a;
   int x;
-  int ret;
   uint8_t *p;
   char *s;
-  struct timeval tm;
-  int retry = 3;
 
   s = strtok(NULL, WS);
   if (!s){
@@ -244,40 +340,13 @@ void send_exec(void)
   }
   a = strtol(s, NULL, 16);
   a &= 0xffff;
-  memset(obuf, 0, BUFLEN);
-  p = obuf;
-  *p++ = MT_EXEC;
-  *p++ = 0;
-  *p++ = 0;
-  *p++ = a >> 8;
-  *p++ = a & 0xff;
-  *p++ = 0;
-  *p++ = 0;
-  while (retry--) {
-    sendto(sd,obuf, p - obuf, 0,
-	   (struct sockaddr *)&db[conn].addr,
-	   sizeof(struct sockaddr_in));
-    tm.tv_sec = 1;
-    tm.tv_usec = 0;
-    ret = setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, &tm, sizeof(struct timeval));
-    x = sizeof(struct sockaddr_in);
-    ret = recvfrom(sd,buf,BUFLEN,0,
-		   (struct sockaddr *)&raddr, &x);
-    // todo: add announcements here
-    if (ret < 0){
-      if (errno == EAGAIN){
-	continue;
-      }
-      perror("recv");
-      exit(1);
-    }
-    if ((buf[0] & MT_MASK) == MT_EXEC){
-      printf("ok\n");
-      return;
-    }
+  if (send_exec(a)){
+    fprintf(stderr,"error: command timeout\n");
+    return;
   }
-  fprintf(stderr, "error: command timeout.\n");
+  printf("ok\n");
 }
+
 
 /* process user input */
 void input(void)
@@ -292,7 +361,8 @@ void input(void)
   else if (!strcmp(ptr,"connect")) { do_connect(); return; }
   else if (!strcmp(ptr,"dump")) { send_dump(); return; }
   else if (!strcmp(ptr,"poke")) { send_poke(); return; }
-  else if (!strcmp(ptr,"exec")) { send_exec(); return; }
+  else if (!strcmp(ptr,"exec")) { do_exec(); return; }
+  else if (!strcmp(ptr,"dasm")) { send_dasm(); return; }
   else if (!strcmp(ptr,"exit")) exit(1);
   else if (!strcmp(ptr,"quit")) exit(1);
   else
