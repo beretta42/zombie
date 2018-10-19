@@ -1,4 +1,6 @@
-section .code load 0e00
+section .start load 0e00
+section .code
 section .data
+section .end
 entry start
 

@@ -11,6 +11,11 @@
 	export  inmax
 	export  inbuf
 
+	.area	.start
+prog_start equ *
+	.area	.end
+prog_end equ *
+
 	.area	.data
 insize	.dw	0		; size of packet in input buffer
 inbuf	.dw	$600		; pointer to input buffer
@@ -66,7 +71,7 @@ start	orcc	#$50		; turn off interrupts
 	inc	$500
 	;; lookup server
 	ldx	#server
-	jsr	resolve
+*	jsr	resolve
 	;; setup a socket
 	ldb	#C_UDP
 	jsr	socket
@@ -75,10 +80,10 @@ start	orcc	#$50		; turn off interrupts
 	std	C_SPORT,x
 	ldd	#6999		; dest port 6999
 	std	C_DPORT,x
-*	ldd	#$ffff
-	ldd	ans
+	ldd	#$ffff
+*	ldd	ans
 	std	C_DIP,x		; destination IP
-	ldd	ans+2
+*	ldd	ans+2
 	std	C_DIP+2,x
 	ldd	#call		; attach a callback
 	std	C_CALL,x
@@ -94,7 +99,7 @@ start	orcc	#$50		; turn off interrupts
 	std	5,x		; size
 	ldd	#7		; size of PDU
 	jsr	udp_out2
-	ldd	#30
+	ldd	#60
 	jsr	pause
 	puls	x
 	ldd	#7
