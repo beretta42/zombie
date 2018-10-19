@@ -13,9 +13,9 @@
 
 #define WS      " \n\t"
 #define INETZ   sizeof(struct sockaddr_in)
-#define BUFLEN  256
+#define BUFLEN  425
 #define LBUFLEN 256
-
+#define PTIME   15
 
 int sd;
 struct sockaddr_in laddr;
@@ -76,9 +76,8 @@ void db_add(struct sockaddr_in *addr)
   for (x = 0; x < DBNUM; x++){
     if (db[x].flag != DF_EMPTY &&
 	db[x].addr.sin_addr.s_addr == addr->sin_addr.s_addr) {
-      db[x].time = time(NULL) + 15;
       db[x].flag = DF_USED;
-      return;
+      goto out;
     }
   }
   /* add to first free db entry */
@@ -87,10 +86,11 @@ void db_add(struct sockaddr_in *addr)
       db[x].flag = DF_USED;
       memcpy(&db[x].addr, addr, sizeof(struct sockaddr_in));
       db[x].cap = 0;
-      db[x].time = time(NULL) + 15;
-      return;
+      goto out;
     }
   }
+ out:
+  db[x].time = time(NULL) + PTIME;
 }
 
 
@@ -192,7 +192,8 @@ int send_read(uint8_t *abuf, uint16_t addr, uint16_t len) {
   return 0;
 }
 
-int send_write(uint8_t *abuf, uint16_t addr, uint16_t len) {
+
+int send_write_ll(uint8_t *abuf, uint16_t addr, uint16_t len) {
   uint8_t *p = obuf;
   memset(obuf, 0, BUFLEN);
   *p++ = MT_WRITE;
@@ -206,6 +207,20 @@ int send_write(uint8_t *abuf, uint16_t addr, uint16_t len) {
   p += len;
   if (send_trans(p - obuf, MT_WRITE))
     return -1;
+  return 0;
+}
+
+int send_write(uint8_t *abuf, uint16_t addr, uint16_t len) {
+  int todo = len;
+  int l;
+  while (todo){
+    l = BUFLEN < todo ? BUFLEN : todo;
+    if (send_write_ll(abuf, addr, l))
+      return -1;
+    abuf += l;
+    addr += l;
+    todo -= l;
+  }
   return 0;
 }
 
@@ -382,6 +397,55 @@ void do_reboot(void)
   printf("ok\n");
 }
 
+
+// do a simple .bin load
+void do_load(void)
+{
+  uint8_t h[5];
+  int ret;
+  int len;
+  int addr;
+  int todo;
+  int l;
+  char *p;
+
+  p = strtok(NULL, WS);
+  if (!p) {
+    fprintf(stderr,"error: filename expected.\n");
+    return;
+  }
+
+  FILE *f = fopen(p, "r");
+  if (!f) {
+    perror("fopen");
+    return;
+  }
+
+  ret = fread(h, 5, 1, f);
+  len = ntohs(*((uint16_t *)(h+1)));
+  addr = ntohs(*((uint16_t *)(h+3)));
+  while (!h[0]){
+    printf("%.04x %.04x\n", addr, len);
+    todo = len;
+    while(todo){
+      l = BUFLEN < todo ? BUFLEN : todo;
+      fread(tbuf, l, 1, f);
+      if (send_write_ll(tbuf, addr, l)){
+	fprintf(stderr,"error: command timeout.");
+	return;
+      }
+      addr += l;
+      todo -= l;
+    }
+    ret = fread(h, 5, 1, f);
+    len = ntohs(*((uint16_t *)(h+1)));
+    addr = ntohs(*((uint16_t *)(h+3)));
+  }
+  printf("exec: %.04x\n", addr);
+  fclose(f);
+}
+
+
 /* process user input */
 void input(void)
 {
@@ -398,6 +462,7 @@ void input(void)
   else if (!strcmp(ptr,"exec")) { do_exec(); return; }
   else if (!strcmp(ptr,"dasm")) { do_dasm(); return; }
   else if (!strcmp(ptr,"reboot")) { do_reboot(); return; }
+  else if (!strcmp(ptr,"load")) { do_load(); return; }
   else if (!strcmp(ptr,"exit")) exit(1);
   else if (!strcmp(ptr,"quit")) exit(1);
   else
@@ -435,7 +500,7 @@ void process_time(void)
 	}
 	db[x].flag = DF_IFFY;
       }
-      db[x].time = time(NULL) + 15;
+      db[x].time = time(NULL) + PTIME;
     }
   }
 }
