@@ -398,8 +398,7 @@ void do_reboot(void)
 }
 
 
-// do a simple .bin load
-void do_load(void)
+int load(char *filename)
 {
   uint8_t h[5];
   int ret;
@@ -407,18 +406,11 @@ void do_load(void)
   int addr;
   int todo;
   int l;
-  char *p;
-
-  p = strtok(NULL, WS);
-  if (!p) {
-    fprintf(stderr,"error: filename expected.\n");
-    return;
-  }
-
-  FILE *f = fopen(p, "r");
+  
+  FILE *f = fopen(filename, "r");
   if (!f) {
     perror("fopen");
-    return;
+    return -1;
   }
 
   ret = fread(h, 5, 1, f);
@@ -430,10 +422,8 @@ void do_load(void)
     while(todo){
       l = BUFLEN < todo ? BUFLEN : todo;
       fread(tbuf, l, 1, f);
-      if (send_write_ll(tbuf, addr, l)){
-	fprintf(stderr,"error: command timeout.");
-	return;
-      }
+      if (send_write_ll(tbuf, addr, l))
+	return -1;
       addr += l;
       todo -= l;
     }
@@ -443,6 +433,22 @@ void do_load(void)
   }
   printf("exec: %.04x\n", addr);
   fclose(f);
+  return 0;
+}
+
+
+// do a simple .bin load
+void do_load(void)
+{
+  char *p;
+
+  p = strtok(NULL, WS);
+  if (!p) {
+    fprintf(stderr,"error: filename expected.\n");
+    return;
+  }
+  if(load(p))
+    fprintf(stderr,"error: command timeout.\n");
 }
 
 
