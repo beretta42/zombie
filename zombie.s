@@ -21,9 +21,12 @@ insize	.dw	0		; size of packet in input buffer
 inbuf	.dw	$600		; pointer to input buffer
 inmax	.dw	$200		; max size of input buffer
 
+
 stack	rmb	256		; a private stack
 stacke		
-	
+ivect	rmb	2		; saved BASIC's irq vector
+sstack  rmb	2		; saved entry stack frame
+sstack1	rmb	2		; saved stack
 time	.dw	0		; a ticker
 	
 	.area	.code
@@ -46,11 +49,17 @@ irq_handle
 	addd	#1
 	std	time
 	;; call ip6809's ticker
+	sts	sstack
 	jsr	tick
-	rti
+	lds	sstack
+	;; tail call BASIC's normal vector
+	jmp	[ivect]
 
 	
 start	orcc	#$50		; turn off interrupts
+	sts	sstack1
+	ldx	$10d
+	stx	ivect
 	ldx	#irq_handle
 	stx	$10d
 	lds	#stacke
@@ -58,10 +67,10 @@ start	orcc	#$50		; turn off interrupts
 	jsr	dev_init	; init device
 	ldx	#$600		; add a buffers to freelist
 	jsr	freebuff	;
-	ldx	#$800
-	jsr	freebuff
-	ldx	#$a00
-	jsr	freebuff
+*	ldx	#$800
+*	jsr	freebuff
+*	ldx	#$a00
+*	jsr	freebuff
 	andcc	#~$10		; turn on irq interrupt
 	ldx	#ipmask
 	jsr	ip_setmask
@@ -106,8 +115,10 @@ start	orcc	#$50		; turn off interrupts
 	jsr	udp_out2
 	ldx	inbuf
 	jsr	freebuff
-	;; do main loop
-a@	bra	a@
+	;; go back to BASIC
+a@
+	lds	sstack1
+	rts
 error	inc	$501
 	bra	a@
 
@@ -169,6 +180,10 @@ cmd_exec
 	jsr	udp_out2
 	ldx	inbuf
 	jsr	freebuff
+	puls	x
+	ldu	sstack
+	stx	10,u
+	rts
 	jmp	[,s]
 
 cmd_reply
