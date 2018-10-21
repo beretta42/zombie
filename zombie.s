@@ -11,6 +11,8 @@
 	export  inmax
 	export  inbuf
 
+ANN_TO	equ	5*60		; announcement timeout (5 sec)
+
 	.area	.start
 prog_start equ *
 	.area	.end
@@ -28,6 +30,7 @@ ivect	rmb	2		; saved BASIC's irq vector
 sstack  rmb	2		; saved entry stack frame
 sstack1	rmb	2		; saved stack
 time	.dw	0		; a ticker
+atime	.dw	0		; announce every so often
 	
 	.area	.code
 
@@ -48,6 +51,14 @@ irq_handle
 	ldd	time
 	addd	#1
 	std	time
+	;; check announce timer
+	ldd	atime
+	beq	a@
+	subd	#1
+	bne	a@
+	jsr	announce
+	ldd	#ANN_TO
+a@	std	atime
 	;; call ip6809's ticker
 	sts	sstack
 	jsr	tick
@@ -98,23 +109,12 @@ start	orcc	#$50		; turn off interrupts
 	std	C_CALL,x
 	;; send a boot announcement twice...
 	;; (ARP may eat the first one!)
-	jsr	getbuff		; X = new buffer
-	leax	47,x		; pad for lower layers (DW+ETH+IP+UDP)
-	pshs	x
-	ldd	#0
-	sta	0,x		; message type
-	std	1,x		; XID
-	std	3,x		; address
-	std	5,x		; size
-	ldd	#7		; size of PDU
-	jsr	udp_out2
+	jsr	announce
 	ldd	#60
 	jsr	pause
-	puls	x
-	ldd	#7
-	jsr	udp_out2
-	ldx	inbuf
-	jsr	freebuff
+	jsr	announce
+	ldd	#ANN_TO
+	std	atime
 	;; go back to BASIC
 a@
 	lds	sstack1
@@ -196,3 +196,20 @@ cmd_reply
 	std	C_DIP+2,y
 	rts
 
+announce
+*	ldx	conn
+*	ldd	#$ffff
+*	std	C_DIP,x
+*	std	C_DIP+2,x
+	jsr	getbuff		; X = new buffer
+	leax	47,x		; pad for lower layers (DW+ETH+IP+UDP)
+	ldd	#0
+	sta	0,x		; message type
+	std	1,x		; XID
+	std	3,x		; address
+	std	5,x		; size
+	ldd	#7		; size of PDU
+	jsr	udp_out2
+	ldx	inbuf
+	jsr	freebuff
+	rts
