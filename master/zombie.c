@@ -10,11 +10,12 @@
 #include <sys/time.h>
 #include <time.h>
 #include <errno.h>
+#include <editline/readline.h>
+#include <editline/history.h>
 
 #define WS      " \n\t"
 #define INETZ   sizeof(struct sockaddr_in)
 #define BUFLEN  425
-#define LBUFLEN 256
 #define PTIME   15
 
 int sd;
@@ -23,7 +24,6 @@ struct sockaddr_in raddr;
 uint8_t buf[BUFLEN];
 uint8_t obuf[BUFLEN];
 uint8_t tbuf[BUFLEN];
-uint8_t lbuf[LBUFLEN];
 
 struct db_entry {
   int flag;
@@ -106,14 +106,6 @@ void db_list(void)
       printf("%c\n", (db[x].flag == DF_IFFY) ? '?' : ' ');
     }
   }
-}
-
-
-/* prompt the user */
-void prompt(void)
-{
-  printf("> ");
-  fflush(stdout);
 }
 
 
@@ -451,13 +443,19 @@ void do_load(void)
     fprintf(stderr,"error: command timeout.\n");
 }
 
+/* input a line of basic */
+void do_basic(void)
+{
+  fprintf(stderr,"error: command comming soon.\n");
+}
+
 
 /* process user input */
-void input(void)
+void input(char *line)
 {
   uint8_t *ptr;
-  
-  ptr = strtok(lbuf, WS);
+  add_history(line);
+  ptr = strtok(line, WS);
   if (ptr == NULL) return;
   if (*ptr == 0) return;
   if (*ptr == '\n') return;
@@ -469,6 +467,7 @@ void input(void)
   else if (!strcmp(ptr,"dasm")) { do_dasm(); return; }
   else if (!strcmp(ptr,"reboot")) { do_reboot(); return; }
   else if (!strcmp(ptr,"load")) { do_load(); return; }
+  else if (!strcmp(ptr,"basic")) { do_basic(); return; }
   else if (!strcmp(ptr,"exit")) exit(1);
   else if (!strcmp(ptr,"quit")) exit(1);
   else
@@ -540,7 +539,7 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  prompt();
+  rl_callback_handler_install("> ", input);
   while (1) {
     FD_ZERO(&set);
     FD_SET(0,&set);
@@ -560,14 +559,7 @@ int main(int argc, char *argv[])
       input_net();
     }
     if (FD_ISSET(0,&set)) {
-      ret = read(0,lbuf,LBUFLEN);
-      if (ret < 0 ){
-	perror("read");
-	exit(1);
-      }
-      lbuf[ret] = 0;
-      input();
-      prompt();
+      rl_callback_read_char();
     }
   }
 
