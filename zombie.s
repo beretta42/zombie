@@ -67,8 +67,8 @@ start	orcc	#$50		; turn off interrupts
 	jsr	dev_init	; init device
 	ldx	#$600		; add a buffers to freelist
 	jsr	freebuff	;
-*	ldx	#$800
-*	jsr	freebuff
+	ldx	#$800
+	jsr	freebuff
 *	ldx	#$a00
 *	jsr	freebuff
 	andcc	#~$10		; turn on irq interrupt
@@ -184,7 +184,6 @@ cmd_exec
 	ldu	sstack
 	stx	10,u
 	rts
-	jmp	[,s]
 
 cmd_reply
 	ldy	conn
