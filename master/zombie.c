@@ -33,8 +33,9 @@ struct db_entry {
 };
 
 #define DF_EMPTY 0
-#define DF_USED  1
-#define DF_IFFY  2
+#define DF_IFFY  1
+#define DF_USED  2
+
 
 #define MT_ANN   0
 #define MT_READ  1
@@ -75,15 +76,12 @@ void db_add(struct sockaddr_in *addr)
   /* don't add if already in database */
   for (x = 0; x < DBNUM; x++){
     if (db[x].flag != DF_EMPTY &&
-	db[x].addr.sin_addr.s_addr == addr->sin_addr.s_addr) {
-      db[x].flag = DF_USED;
+	db[x].addr.sin_addr.s_addr == addr->sin_addr.s_addr)
       goto out;
-    }
   }
   /* add to first free db entry */
   for (x = 0; x < DBNUM; x++){
     if (db[x].flag == DF_EMPTY){
-      db[x].flag = DF_USED;
       memcpy(&db[x].addr, addr, sizeof(struct sockaddr_in));
       db[x].cap = 0;
       goto out;
@@ -91,6 +89,7 @@ void db_add(struct sockaddr_in *addr)
   }
  out:
   db[x].time = time(NULL) + PTIME;
+  db[x].flag = DF_USED;
 }
 
 
@@ -390,6 +389,61 @@ void do_reboot(void)
 }
 
 
+/* load a fuzix bin */
+int loadf(char *filename)
+{
+  uint8_t h[5];
+  int ret;
+  int len;
+  int addr;
+  int todo;
+  int l;
+  uint8_t aa;
+  int room;
+  int offset;
+
+  /* we need to check if client is a coco3! */
+  /* we also should calculate the needed bank */
+
+  FILE *f = fopen(filename, "r");
+  if (!f) {
+    perror("fopen");
+    return -1;
+  }
+
+  ret = fread(h, 5, 1, f);
+  len = ntohs(*((uint16_t *)(h+1)));
+  addr = ntohs(*((uint16_t *)(h+3)));
+
+  while (!h[0]){
+    printf("*%.04x %.04x\n", addr, len);
+    todo = len;
+    while(todo){
+      aa = addr >> 13;
+      offset = addr & 0x1fff;
+      room = 0x2000 - offset;
+      if (send_write_ll(&aa, 0xffa1,1))
+	return -1;
+      l = BUFLEN < todo ? BUFLEN : todo;
+      l = l < room ? l : room;
+      printf("%.02x %.04x %.04x %.04x\n", aa, offset, l,0x2000+offset);
+
+      fread(tbuf, l, 1, f);
+      if (send_write_ll(tbuf, 0x2000+offset, l))
+	return -1;
+      addr += l;
+      todo -= l;
+    }
+    ret = fread(h, 5, 1, f);
+    len = ntohs(*((uint16_t *)(h+1)));
+    addr = ntohs(*((uint16_t *)(h+3)));
+  }
+  printf("exec: %.04x\n", addr);
+  fclose(f);
+  return 0;
+}
+
+
 int load(char *filename)
 {
   uint8_t h[5];
@@ -426,6 +480,21 @@ int load(char *filename)
   printf("exec: %.04x\n", addr);
   fclose(f);
   return 0;
+}
+
+
+// load a fuzix image
+void do_loadf(void)
+{
+  char *p;
+
+  p = strtok(NULL, WS);
+  if (!p) {
+    fprintf(stderr,"error: filename expected.\n");
+    return;
+  }
+  if(loadf(p))
+    fprintf(stderr,"error: command timeout.\n");
 }
 
 
@@ -467,6 +536,7 @@ void input(char *line)
   else if (!strcmp(ptr,"dasm")) { do_dasm(); return; }
   else if (!strcmp(ptr,"reboot")) { do_reboot(); return; }
   else if (!strcmp(ptr,"load")) { do_load(); return; }
+  else if (!strcmp(ptr,"loadf")) { do_loadf(); return; }
   else if (!strcmp(ptr,"basic")) { do_basic(); return; }
   else if (!strcmp(ptr,"exit")) exit(1);
   else if (!strcmp(ptr,"quit")) exit(1);
@@ -496,15 +566,10 @@ void process_time(void)
 {
   uint8_t c;
   int x;
+
   for (x = 0; x < DBNUM; x++){
     if (db[x].flag != DF_EMPTY && time(NULL) > db[x].time){
-      if (send_read(&c, 0, 1)){
-	if (db[x].flag == DF_IFFY) {
-	  db[x].flag = DF_EMPTY;
-	  continue;
-	}
-	db[x].flag = DF_IFFY;
-      }
+      db[x].flag -= 1;
       db[x].time = time(NULL) + PTIME;
     }
   }
