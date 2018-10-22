@@ -28,7 +28,6 @@ stack	rmb	256		; a private stack
 stacke		
 ivect	rmb	2		; saved BASIC's irq vector
 sstack  rmb	2		; saved entry stack frame
-sstack1	rmb	2		; saved stack
 time	.dw	0		; a ticker
 atime	.dw	0		; announce every so often
 	
@@ -46,6 +45,8 @@ a@	cmpd	time
 
 irq_handle
 	lda	$ff02		; clear pia
+	sts	sstack
+	lds	#stacke
 	inc	$400		; tick screen fixme: remove
 	;; increment time
 	ldd	time
@@ -60,28 +61,23 @@ irq_handle
 	ldd	#ANN_TO
 a@	std	atime
 	;; call ip6809's ticker
-	sts	sstack
 	jsr	tick
 	lds	sstack
 	;; tail call BASIC's normal vector
 	jmp	[ivect]
-
+	rti
 	
 start	orcc	#$50		; turn off interrupts
-	sts	sstack1
 	ldx	$10d
 	stx	ivect
 	ldx	#irq_handle
 	stx	$10d
-	lds	#stacke
 	jsr	ip6809_init	; initialize system
 	jsr	dev_init	; init device
 	ldx	#$600		; add a buffers to freelist
 	jsr	freebuff	;
 	ldx	#$800
 	jsr	freebuff
-*	ldx	#$a00
-*	jsr	freebuff
 	andcc	#~$10		; turn on irq interrupt
 	ldx	#ipmask
 	jsr	ip_setmask
@@ -116,9 +112,7 @@ start	orcc	#$50		; turn off interrupts
 	ldd	#ANN_TO
 	std	atime
 	;; go back to BASIC
-a@
-	lds	sstack1
-	rts
+a@	rts
 error	inc	$501
 	bra	a@
 
@@ -133,9 +127,7 @@ call
 	beq	cmd_write
 	cmpb	#3	; is execute?
 	beq	cmd_exec
-	ldx	inbuf
-	jsr	freebuff
-	rts
+	lbra	ip_drop
 
 cmd_read
 	bsr	cmd_reply
@@ -150,10 +142,7 @@ a@	ldb	,u+
 	subd	pdu
 	ldx	pdu
 	jsr	udp_out2
-	export debug
-debug
-	ldx	inbuf
-	jmp	freebuff
+	lbra	ip_drop
 
 cmd_write
 	bsr	cmd_reply
@@ -168,8 +157,7 @@ a@	ldb	,x+
 	subd	pdu
 	ldx	pdu
 	jsr	udp_out2
-	ldx	inbuf
-	jmp	freebuff
+	lbra	ip_drop
 
 cmd_exec
 	bsr	cmd_reply
@@ -178,8 +166,7 @@ cmd_exec
 	ldd	pdulen
 	ldx	pdu
 	jsr	udp_out2
-	ldx	inbuf
-	jsr	freebuff
+	lbsr	ip_drop
 	puls	x
 	ldu	sstack
 	stx	10,u
@@ -197,11 +184,9 @@ cmd_reply
 	rts
 
 announce
-*	ldx	conn
-*	ldd	#$ffff
-*	std	C_DIP,x
-*	std	C_DIP+2,x
 	jsr	getbuff		; X = new buffer
+	bcs	out@
+	pshs	x
 	leax	47,x		; pad for lower layers (DW+ETH+IP+UDP)
 	ldd	#0
 	sta	0,x		; message type
@@ -210,6 +195,6 @@ announce
 	std	5,x		; size
 	ldd	#7		; size of PDU
 	jsr	udp_out2
-	ldx	inbuf
+	puls	x
 	jsr	freebuff
-	rts
+out@	rts
