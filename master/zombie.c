@@ -450,7 +450,7 @@ int loadf(char *filename)
   aa = 0;
   return  send_write((uint8_t *)&exec_addr,0x4000,2) ||
     send_write(bounce,0x4002,bounce_len) ||
-    send_write(&saved_mmu,0xffa1,1) );
+    send_write(&saved_mmu,0xffa1,1);
 }
 
 
