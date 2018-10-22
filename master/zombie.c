@@ -528,6 +528,29 @@ void do_basic(void)
   fprintf(stderr,"error: command comming soon.\n");
 }
 
+/* input a C style string text string */
+void do_fcn(void)
+{
+  char *p;
+  char *s;
+  int a;
+
+  p = strtok(NULL,WS);
+  if (!p) {
+    fprintf(stderr,"error: address expected.\n");
+    return;
+  }
+  a = strtol(p, NULL, 16);
+  s = strtok(NULL,"\"\'");
+  if (s == NULL) {
+    fprintf(stderr,"error: string expected %s\n",s);
+    return;
+  }
+  if (send_write(s, a, strlen(s)+1)){
+    fprintf(stderr,"error: command timeout\n.");
+    return;
+  }
+}
 
 /* process user input */
 void input(char *line)
@@ -547,6 +570,7 @@ void input(char *line)
   else if (!strcmp(ptr,"reboot")) { do_reboot(); return; }
   else if (!strcmp(ptr,"load")) { do_load(); return; }
   else if (!strcmp(ptr,"loadf")) { do_loadf(); return; }
+  else if (!strcmp(ptr,"fcn")) { do_fcn(); return; }
   else if (!strcmp(ptr,"basic")) { do_basic(); return; }
   else if (!strcmp(ptr,"exit")) exit(1);
   else if (!strcmp(ptr,"quit")) exit(1);
