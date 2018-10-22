@@ -74,10 +74,10 @@ start	orcc	#$50		; turn off interrupts
 	stx	$10d
 	jsr	ip6809_init	; initialize system
 	jsr	dev_init	; init device
-	ldx	#$600		; add a buffers to freelist
+	ldx	#$4200		; add a buffers to freelist
 	jsr	freebuff	;
-	ldx	#$800
-	jsr	freebuff
+*	ldx	#$4400
+*	jsr	freebuff
 	andcc	#~$10		; turn on irq interrupt
 	ldx	#ipmask
 	jsr	ip_setmask
