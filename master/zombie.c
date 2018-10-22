@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <editline/readline.h>
 #include <editline/history.h>
+#include "bounce.h"
 
 #define WS      " \n\t"
 #define INETZ   sizeof(struct sockaddr_in)
@@ -401,6 +402,8 @@ int loadf(char *filename)
   uint8_t aa;
   int room;
   int offset;
+  uint8_t saved_mmu;
+  uint16_t exec_addr;
 
   /* we need to check if client is a coco3! */
   /* we also should calculate the needed bank */
@@ -411,6 +414,10 @@ int loadf(char *filename)
     return -1;
   }
 
+  if(send_read(&saved_mmu,0xffa1,1))
+    return -1;
+
+  /* load kernel to physical address 0 */
   ret = fread(h, 5, 1, f);
   len = ntohs(*((uint16_t *)(h+1)));
   addr = ntohs(*((uint16_t *)(h+3)));
@@ -438,9 +445,12 @@ int loadf(char *filename)
     len = ntohs(*((uint16_t *)(h+1)));
     addr = ntohs(*((uint16_t *)(h+3)));
   }
-  printf("exec: %.04x\n", addr);
+  exec_addr = htons(addr);
   fclose(f);
-  return 0;
+  aa = 0;
+  return  send_write((uint8_t *)&exec_addr,0x4000,2) ||
+    send_write(bounce,0x4002,bounce_len) ||
+    send_write(&saved_mmu,0xffa1,1) );
 }
 
 
