@@ -6,7 +6,7 @@
 	export  lfsr
 	
 	.area	.data
-MAXBUF	equ	1		; fixme: defined by application
+MAXBUF	equ	6		; fixme: defined by application
 	;; a array of connections/sockets
 tab	rmb	C_SIZE*6
 tabe
@@ -58,6 +58,14 @@ err@	puls	cc
 	coma
 	puls	u,pc
 
+
+;;; Drop the current input buffer
+	export	ip_drop
+ip_drop:
+	pshs	x
+	ldx	inbuf
+	jsr	freebuff
+	puls	x,pc
 	
 ;;; init stack
 	export	ip6809_init
@@ -147,10 +155,10 @@ a@	jsr    next_sock
 	;; poll device
 poll@	dec    time		; decrement poll timer
 	bne    out@
-	jsr    getbuff		; set buffer to new one
+b@	jsr    getbuff		; set buffer to new one
 	bcs    out@
 	stx    inbuf
-b@	jsr    dev_poll
+	jsr    dev_poll
 	bcs    p@
 	ldx    inbuf
 	jsr    eth_in

@@ -15,10 +15,7 @@ icmp_in:
 	ldb	,x		; get type
 	cmpb	#8		; is ping then pong
 	beq	pong
-drop:	
-	coma
-	rts
-
+	lbra	ip_drop
 pong:
 	ldb	#1		; icmp protocol's number
 	stb	proto
@@ -31,11 +28,11 @@ pong:
 	std	,x		; make packet a reply
 	std	2,x		; zero out cksum
 	;; calc cksum
-	ldy	rlen
+	ldy	rlen		; fixme: shouldn't ip_out do the cksum for us?
 	ldd	#0
 	jsr	ip_cksum
 	std	2,x
 	;; send to ip
 	ldd	rlen
 	jsr	ip_out
-	bra	drop
+	lbra	ip_drop

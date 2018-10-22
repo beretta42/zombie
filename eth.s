@@ -44,9 +44,8 @@ eth_in
 	ldy	#bmac
 	jsr	cmp_mac
 	beq	cont@
+	lbra	ip_drop
 	;; drop
-drop	coma
-	rts
 cont@	;; todo: find a raw eth connection here
 	;; distribute to upper layers
 	ldd	12,x
@@ -55,7 +54,7 @@ cont@	;; todo: find a raw eth connection here
 	lbeq	arp_in
 	cmpd	#$800		; is IPv4?
 	lbeq	ip_in
-	bra	drop
+	lbra	ip_drop
 	
 
 eth_out:

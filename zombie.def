@@ -71,6 +71,8 @@ ans		extern
 rand		extern
 lfsr		extern
 
+; drop the current input buffer
+ip_drop	   	extern
 
 ; frees a buffer
 ;   takes: X = ptr

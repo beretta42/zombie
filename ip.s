@@ -92,11 +92,11 @@ ip_in:
 	ldb	,x
 	andb	#$f0
 	cmpb	#$40
-	bne	drop
+	lbne	ip_drop
 	;; check for fragments (we don't do fragments)
 	ldb	6,x
 	bitb	#$20
-	bne	drop
+	lbne	ip_drop
 	;; check dest ip address if not any address (0,0,0,0)
 	;; then only accept packets with our IP
 	ldd	ipaddr
@@ -111,8 +111,7 @@ a@	leau	16,x
 	ldy	#ipbroad	; is broadcast ip?
 	jsr	ip_cmp
 	beq	cont@
-drop:	coma
-	rts
+	lbra	ip_drop
 	;; packet looks good
 cont@	ldd	12,x		; save source ip for use later
 	std	ripaddr
@@ -137,7 +136,7 @@ cont@	ldd	12,x		; save source ip for use later
 	lbeq	icmp_in		; go answer ping
 	cmpa	#6		; is tcp?
 	lbeq	tcp_in		; go process tcp
-	bra	drop
+	lbra	ip_drop
 
 
 ip_out:

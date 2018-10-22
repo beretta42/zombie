@@ -61,10 +61,10 @@ a@	clr	,y+
 arp_in:
 	ldd	,x		; get hardware type
 	cmpd	#1		; is ethernet?
-	bne	drop
+	lbne	ip_drop
 	ldd	2,x		; get protocol type
 	cmpd	#$800		; is ip?
-	bne	drop
+	lbne	ip_drop
 	;; todo check protocol/hardware address lengths?
 	;; or can we rely on above type checks?
 	ldd	6,x
@@ -72,14 +72,13 @@ arp_in:
 	beq	request_in
 	cmpb	#2		; reply?
 	beq	reply_in
-drop:	coma
-	rts
+	lbra	ip_drop
 
 request_in:
 	leay	24,x		; get target ip address
 	ldu	#ipaddr
 	jsr	ip_cmp		; compare to ours
-	bne	drop
+	lbne	ip_drop
 	inc	7,x		; convert packet to reply
 	;; copy sender to target
 	leay	18,x
@@ -106,7 +105,7 @@ request_in:
 	std	type
 	ldd	#28		; size of arp
 	jsr	eth_out
-	bra	drop
+	lbra	ip_drop
 	
 reply_in:
 	pshs	x		; save packet ptr
@@ -123,7 +122,7 @@ found@	tfr	x,y
 	leau	8,x
 	ldb	#10		; copy eth and ip addresses
 	jsr	memcpy		; to new record
-	bra	drop
+	lbra	ip_drop
 	
 
 

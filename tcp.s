@@ -457,7 +457,7 @@ tcp_cksum
 tcp_in	
 	jsr	for_sock
 a@	jsr	next_sock
-	bcs	drop
+	lbcs	ip_drop
 	ldy	conn
 	ldb	C_FLG,y		; is a TCP socket?
 	cmpb	#C_TCP
@@ -484,10 +484,10 @@ a@	jsr	next_sock
 	;; call the callback
 	ldx	conn
 	ldx	C_CALL,x
-	beq	drop
+	lbeq	ip_drop
 	ldb	#C_CALLRX
 	jsr	,x
-drop	rts
+	lbra	ip_drop
 	
 
 ;;; initialize the tcp subsystem

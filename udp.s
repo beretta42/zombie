@@ -24,7 +24,7 @@ udp_init
 udp_in:	;; scan for matching socket
 	jsr	for_sock
 a@	jsr	next_sock
-	bcs	drop
+	lbcs	ip_drop
 	ldy	conn
 	ldb	C_FLG,y		; is a UDP socket?
 	cmpb	#C_UDP
@@ -45,11 +45,7 @@ a@	jsr	next_sock
 	beq	b@
 	ldb	#C_CALLRX
 	jsr	,x
-b@	clra
-	rts
-drop:	
-	coma
-	rts
+b@	rts
 
 
 udp_out:

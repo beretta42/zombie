@@ -1,7 +1,6 @@
 	include "zombie.def"
 
 	export	dhcp_init
-	export	debug
 
 	.area	.data
 oipaddr	rmb	4		; offered IP address
@@ -231,34 +230,32 @@ cb_offer
 	ldx	pdu
 	ldd	4,x
 	cmpd	mac
-	bne	drop@
+	lbne	ip_drop
 	ldd	6,x
 	cmpd	mac+2
-	bne	drop@
+	lbne	ip_drop
 	;; filter for bootp reply
 	ldb	,x
 	cmpb	#2
-	bne	drop@
+	lbne	ip_drop
 	;; get offer options / filter for expected DHCP
 	jsr     offer
 	lda	itype
 	cmpa	etype
-	bne	drop@
+	lbne	ip_drop
 	inc	flag
 	ldx	conn
 	clr	C_TIME,x
 	clr	C_TIME+1,x
 	bra	ok@
 	;; a timeout has happend
-debug
 to@	dec	retry
 	beq	fail@           ; no failing on out-of-retries yet
 	jsr	[vect]	        ; send BOOTREQUEST packet again
 	ldd	#4*60		; reset timer
 	ldx	conn
 	std	C_TIME,x
-drop@	
-ok@	rts
+	bra	ok@
 fail@	inc	flag
 	inc	flag
-	rts
+ok@	lbra	ip_drop
