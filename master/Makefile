@@ -9,4 +9,4 @@ zombie: zombie.c bounce.h
 	gcc -o zombie zombie.c -ledit
 
 clean:
-	rm -f *~ zombie
+	rm -f *~ zombie bounce bounce.h
