@@ -45,3 +45,14 @@ After loading/exec'ing  your zombie.bin will  go TSR, mooching  on the
 command packets from a master.
 
 
+# Set up tap interface
+ip tuntap add dev tap0 mode tap
+ip addr add 192.168.42.1/24 dev tap0
+ip link set tap0 up
+# Enable NAT and forwarding on the tap
+echo 1 > /proc/sys/net/ipv4/ip_forward
+iptables -t nat -A POSTROUTING -o wlp18s0b1 -j MASQUERADE
+iptables -A FORWARD -i tap0 -o wlp18s0b1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -A FORWARD -i tap0 -o eth0 -j ACCEPT
+# Run a dhcp server on the tap
+dhcpd -f -cf zombie/dhcpd.test
