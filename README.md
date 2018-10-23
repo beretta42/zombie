@@ -45,6 +45,8 @@ After loading/exec'ing  your zombie.bin will  go TSR, mooching  on the
 command packets from a master.
 
 
+Doing something like this should be close:
+```
 # Set up tap interface
 ip tuntap add dev tap0 mode tap
 ip addr add 192.168.42.1/24 dev tap0
@@ -56,3 +58,4 @@ iptables -A FORWARD -i tap0 -o wlp18s0b1 -m state --state RELATED,ESTABLISHED -j
 iptables -A FORWARD -i tap0 -o eth0 -j ACCEPT
 # Run a dhcp server on the tap
 dhcpd -f -cf zombie/dhcpd.test
+```
