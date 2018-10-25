@@ -137,6 +137,8 @@ C_CALLTO	equ	0       ; timeout
 C_CALLRX	equ	1	; rx data
 
 
+tcp_connect	extern
+tcp_send	extern
+tcp_close	extern
+tcp_recv	extern
 
-;; fixme: for debugging
-tab	        extern

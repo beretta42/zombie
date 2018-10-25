@@ -1,11 +1,5 @@
 	include "zombie.def"
 
-	import	tcp_connect
-	import	tcp_send
-	import	tcp_close
-	import  tcp_recv
-
-	
 	export	start
 	export  insize
 	export  inmax

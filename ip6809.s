@@ -194,7 +194,7 @@ next_sock
 	pshs	x
 	ldx	conn,pcr
 ns1	leax	C_SIZE,x
-	cmpx	,s		; fixme: NOT PIC
+	cmpx	,s
 	beq	nf@
 	tst	,x
 	beq	ns1
