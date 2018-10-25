@@ -18,7 +18,6 @@
 	export  ip_setmask
 
 	.area	.data
-	rmb	47		; todo: fixme: for sending settings
 ipaddr	rmb	4		; our IP address
 ipmask	rmb	4		; our netmask
 ipbroad	rmb	4		; our broadcast address (calculated)
