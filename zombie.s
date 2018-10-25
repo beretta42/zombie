@@ -19,17 +19,17 @@ prog_start equ *
 prog_end equ *
 
 	.area	.data
-insize	.dw	0		; size of packet in input buffer
-inbuf	.dw	$600		; pointer to input buffer
+insize	rmb	2		; size of packet in input buffer
+inbuf	rmb	2		; pointer to input buffer
 inmax	.dw	$200		; max size of input buffer
 
 
-stack	rmb	256		; a private stack
+stack	rmb	64		; a private stack
 stacke		
 ivect	rmb	2		; saved BASIC's irq vector
 sstack  rmb	2		; saved entry stack frame
-time	.dw	0		; a ticker
-atime	.dw	0		; announce every so often
+time	rmb	2		; a ticker
+atime	rmb	2		; announce every so often
 	
 	.area	.code
 
@@ -38,79 +38,74 @@ server	fcn	"play-classics.net"
 ;;; pause
 ;;;   takes D = time in jiffies to wait
 pause
-	addd	time
-a@	cmpd	time
+	addd	time,pcr
+a@	cmpd	time,pcr
 	bne	a@
 	rts
 
 irq_handle
 	lda	$ff02		; clear pia
-	sts	sstack
-	lds	#stacke
+	sts	sstack,pcr
+	leas	stacke,pcr
 	inc	$400		; tick screen fixme: remove
 	;; increment time
-	ldd	time
+	ldd	time,pcr
 	addd	#1
-	std	time
+	std	time,pcr
 	;; check announce timer
-	ldd	atime
+	ldd	atime,pcr
 	beq	a@
 	subd	#1
 	bne	a@
-	jsr	announce
+	lbsr	announce
 	ldd	#ANN_TO
-a@	std	atime
+a@	std	atime,pcr
 	;; call ip6809's ticker
-	jsr	tick
-	lds	sstack
+	lbsr	tick
+	lds	sstack,pcr
 	;; tail call BASIC's normal vector
 	jmp	[ivect]
-	rti
 	
 start	orcc	#$50		; turn off interrupts
+	ldd	#0
+	std	time,pcr
+	std	atime,pcr
 	ldx	$10d
-	stx	ivect
-	ldx	#irq_handle
+	stx	ivect,pcr
+	leax	irq_handle,pcr
 	stx	$10d
-	jsr	ip6809_init	; initialize system
-	jsr	dev_init	; init device
+	lbsr	ip6809_init	; initialize system
+	lbsr	dev_init	; init device
 	ldx	#$4200		; add a buffers to freelist
-	jsr	freebuff	;
-*	ldx	#$4400
-*	jsr	freebuff
+	lbsr	freebuff	;
 	andcc	#~$10		; turn on irq interrupt
-	ldx	#ipmask
-	jsr	ip_setmask
 	;; dhcp
-	jsr	dhcp_init
+	lbsr	dhcp_init
 	lbcs	error
 	inc	$500
 	;; lookup server
-	ldx	#server
-*	jsr	resolve
+	leax	server,pcr
+	lbsr	resolve
+	bcc	b@
+	inc	$501
 	;; setup a socket
-	ldb	#C_UDP
-	jsr	socket
-	ldx	conn
+b@	ldb	#C_UDP
+	lbsr	socket
+	ldx	conn,pcr
 	ldd	#0		; source port is ephemeral
 	std	C_SPORT,x
 	ldd	#6999		; dest port 6999
 	std	C_DPORT,x
-	ldd	#$ffff
-*	ldd	ans
+	ldd	ans,pcr
 	std	C_DIP,x		; destination IP
-*	ldd	ans+2
+	ldd	ans+2,pcr
 	std	C_DIP+2,x
-	ldd	#call		; attach a callback
-	std	C_CALL,x
+	leay	call,pcr	; attach a callback
+	sty	C_CALL,x
 	;; send a boot announcement twice...
-	;; (ARP may eat the first one!)
-	jsr	announce
-	ldd	#60
-	jsr	pause
-	jsr	announce
+	lbsr	announce
 	ldd	#ANN_TO
-	std	atime
+	std	atime,pcr
 	;; go back to BASIC
 a@	rts
 error	inc	$501
@@ -119,7 +114,7 @@ error	inc	$501
 ;; callback for received datagrams
 ;; just print the udp's data as a string
 call
-	ldx	pdu
+	ldx	pdu,pcr
 	ldb	,x
 	cmpb	#1	; is read ?
 	beq	cmd_read
@@ -129,6 +124,7 @@ call
 	beq	cmd_exec
 	lbra	ip_drop
 
+	export	cmd_read
 cmd_read
 	bsr	cmd_reply
 	ldy	5,x
@@ -139,52 +135,57 @@ a@	ldb	,u+
 	leay	-1,y
 	bne	a@
 	tfr	x,d
-	subd	pdu
-	ldx	pdu
-	jsr	udp_out2
+	subd	pdu,pcr
+	ldx	pdu,pcr
+	lbsr	udp_out
 	lbra	ip_drop
-
+	
 cmd_write
 	bsr	cmd_reply
 	ldy	5,x
-	ldu	3,x
+	cmpy	#0
+	bhi	debug
+b@	ldu	3,x
 	leax	7,x
 a@	ldb	,x+
 	stb	,u+
 	leay	-1,y
 	bne	a@
 	tfr	x,d
-	subd	pdu
-	ldx	pdu
-	jsr	udp_out2
+	subd	pdu,pcr
+	ldx	pdu,pcr
+	lbsr	udp_out
 	lbra	ip_drop
+	export  debug
+debug	bra	b@
+
 
 cmd_exec
 	bsr	cmd_reply
 	ldx	3,x
 	pshs	x
-	ldd	pdulen
-	ldx	pdu
-	jsr	udp_out2
+	ldd	pdulen,pcr
+	ldx	pdu,pcr
+	lbsr	udp_out
 	lbsr	ip_drop
 	puls	x
-	ldu	sstack
+	ldu	sstack,pcr
 	stx	10,u
 	rts
 
 cmd_reply
-	ldy	conn
+	ldy	conn,pcr
 	ldb	,x
 	orb	#$80		; change to reply
 	stb	,x
-	ldd	ripaddr		; send to host we've recv'd command from
+	ldd	ripaddr,pcr	; send to host we've recv'd command from
 	std	C_DIP,y
-	ldd	ripaddr+2
+	ldd	ripaddr+2,pcr
 	std	C_DIP+2,y
 	rts
 
 announce
-	jsr	getbuff		; X = new buffer
+	lbsr	getbuff		; X = new buffer
 	bcs	out@
 	pshs	x
 	leax	47,x		; pad for lower layers (DW+ETH+IP+UDP)
@@ -194,7 +195,7 @@ announce
 	std	3,x		; address
 	std	5,x		; size
 	ldd	#7		; size of PDU
-	jsr	udp_out2
+	lbsr	udp_out
 	puls	x
-	jsr	freebuff
+	lbsr	freebuff
 out@	rts

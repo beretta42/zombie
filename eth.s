@@ -1,5 +1,6 @@
 	include "zombie.def"
 
+	export  eth_init
 	export	eth_in
 	export	eth_out
 	export  mac
@@ -9,7 +10,9 @@
 	export	bmac
 	
 	.area	.data
-
+dmac	rmb	6
+mac	rmb	6
+type	rmb 	2
 
 	.area	.code
 
@@ -19,9 +22,10 @@ bmac	.db	-1,-1,-1,-1,-1,-1
 ;;; keep this stuff together for easier copying to actual packet header,
 ;;; 	but all this stuff should go into RAM!!! (and out of area .code)
 ;;;     this means initing 'mac'.
-dmac	.db	-1,-1,-1,-1,-1,-1
-mac	.db	0,1,2,3,4,5	
-type	.dw	0x806	
+mirror
+	.db	-1,-1,-1,-1,-1,-1
+	.db	0,1,2,3,4,5
+	.dw	0x806
 	
 cmp_mac
 	pshs	y,u	
@@ -35,14 +39,22 @@ cmp_mac
 	cmpd	,y
 out@	puls	y,u,pc
 
+	;; init this module
+eth_init
+	lbsr	arp_init
+	leau	mirror,pcr
+	leay	dmac,pcr
+	ldb	#14
+	lbra	memcpy
+
 eth_in
 	;; filter for mac or broadcast
 	tfr	x,u
-	ldy	#mac	
-	jsr	cmp_mac
+	leay	mac,pcr
+	lbsr	cmp_mac
 	beq	cont@
-	ldy	#bmac
-	jsr	cmp_mac
+	leay	bmac,pcr
+	lbsr	cmp_mac
 	beq	cont@
 	lbra	ip_drop
 	;; drop
@@ -58,15 +70,15 @@ cont@	;; todo: find a raw eth connection here
 	
 
 eth_out:
-	jsr	arp_resolve
+	lbsr	arp_resolve
 	bcs	out@		; dont send if we sent an ARP request
 	addd	#14		; add ethernet header length
 	pshs	d
 	leax	-14,x		; alloc eth header
 	leay	,x
-	ldu	#dmac
+	leau	dmac,pcr
 	ldb	#14
-	jsr	memcpy
+	lbsr	memcpy
 	puls	d
-	jsr	dev_send	; send to device
+	lbsr	dev_send	; send to device
 out@	rts

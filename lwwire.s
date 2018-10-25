@@ -44,7 +44,7 @@ dev_send
 	std	0,x
 	ldb	#$02
 	stb	2,x
-	jmp	DWWrite
+	lbra	DWWrite
 
 ;;; Device initialization
 ;;;   return: C set on error
@@ -53,10 +53,10 @@ dev_init
 	std	,--s
 	leax	,s
 	ldy	#2
-	jsr	DWWrite
+	lbsr	DWWrite
 	leax	,s
 	ldy	#1
-	jsr	DWRead
+	lbsr	DWRead
 	bcs	err@		; frame error
 	bne	err@		; timeout before all bytes received
 	puls	d
@@ -78,33 +78,33 @@ dev_poll
 	stb	,-s
 	leax	,s
 	ldy	#3
-	jsr	DWWrite
+	lbsr	DWWrite
 	leas	1,s
 	leax	,s
 	ldy	#2
-	jsr	DWRead
+	lbsr	DWRead
 	leas	2,s
 	bne	no@
 	bcs	no@
 	ldd	-2,s
 	beq	no@
 	bmi	no@
-	cmpd	inmax
+	cmpd	inmax,pcr
 	bhi	no@
 	;; send get the packet
-	std	insize
+	std	insize,pcr
 	ldd	#$0101
 	std	,--s
 	ldb	#$f3
 	stb	,-s
 	leax	,s
 	ldy	#3
-	jsr	DWWrite
+	lbsr	DWWrite
 	leas	3,s
 	;; get the packet data
-	ldx	inbuf
-	ldy	insize
-	jsr	DWRead
+	ldx	inbuf,pcr
+	ldy	insize,pcr
+	lbsr	DWRead
 	bne	no@
 	bcs	no@
 yes@	clra

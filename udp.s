@@ -3,8 +3,6 @@
 	export udp_init
 	export udp_in
 	export udp_out
-*	export sport
-*	export dport
 	export pdu
 	export pdulen
 
@@ -18,14 +16,14 @@ eport	rmb	2		; next ephemeral port number
 	;; initialize the udp subsystem
 udp_init
 	ldd	#$c000
-	std	eport
+	std	eport,pcr
 	rts
 
 udp_in:	;; scan for matching socket
-	jsr	for_sock
-a@	jsr	next_sock
+	lbsr	for_sock
+a@	lbsr	next_sock
 	lbcs	ip_drop
-	ldy	conn
+	ldy	conn,pcr
 	ldb	C_FLG,y		; is a UDP socket?
 	cmpb	#C_UDP
 	bne	a@
@@ -35,12 +33,12 @@ a@	jsr	next_sock
 	;; found our socket
 	;; record pdu / length
 	leay	8,x
-	sty	pdu
-	ldy	rlen
+	sty	pdu,pcr
+	ldy	rlen,pcr
 	leay	-8,y
-	sty	pdulen
+	sty	pdulen,pcr
 	;; call the callback (if set)
-	ldx	conn
+	ldx	conn,pcr
 	ldx	C_CALL,x
 	beq	b@
 	ldb	#C_CALLRX
@@ -48,26 +46,8 @@ a@	jsr	next_sock
 b@	rts
 
 
-udp_out:
-	rts
-*	addd	#8
-*	pshs	d
-*	leax	-8,x
-*	std	4,x		; save length in packet
-*	clr	6,x		; clear checksum
-*	clr	7,x		;
-*	leay	,x		; copy source and dest ports
-*	ldu	#sport
-*	ldb	#4
-*	jsr	memcpy
-*	ldb	#17
-*	stb	proto
-*	puls	d		; get total size back
-*	jmp	ip_out		; onto ip!
-
-	
-	export	udp_out2
-udp_out2:	
+	export	udp_out
+udp_out:	
 	addd	#8
 	pshs	d
 	leax	-8,x
@@ -75,37 +55,37 @@ udp_out2:
 	clr	6,x		; clear/disable checksum
 	clr	7,x		;
 	leay	,x		; copy source and dest ports
-	ldu	conn
+	ldu	conn,pcr
 	ldd	C_SPORT,u	; check for zero port
 	bne	s@
-	jsr	ephem		; go get ephemeral port
+	lbsr	ephem		; go get ephemeral port
 s@	leau	C_SPORT,u
 	ldb	#4
-	jsr	memcpy
+	lbsr	memcpy
 	ldb	#17		; fixme: smells
-	stb	proto
+	stb	proto,pcr
 	puls	d		; get total size back
-	jmp	ip_out2		; onto ip!
+	lbra	ip_out		; onto ip!
 
 
 ephem:	pshs	x
-	ldx	conn		; stack conn ptr
+	ldx	conn,pcr	; stack conn ptr
 	pshs	x
-a@	jsr	for_sock	; start iterating
-b@	jsr	next_sock
+a@	lbsr	for_sock	; start iterating
+b@	lbsr	next_sock
 	bcs	out@
-	ldd	eport
+	ldd	eport,pcr
 	cmpd	C_SPORT,x	; get src port of socket
 	bne	b@		; no then check next socket
 	addd	#1		; yes then try next port
 	bne	s@		; did we wrap to zero?
 	ldd	#$c000		; yes then start at beg of ephem ports
-s@	std	eport		; save in eport
+s@	std	eport,pcr	; save in eport
 	bra	a@		; start socket scan afresh
 out@	puls	x		; restore conn ptr
-	stx	conn
-	ldd	eport
+	stx	conn,pcr
+	ldd	eport,pcr
 	std	C_SPORT,x	; save 
 	addd	#1
-	std	eport
+	std	eport,pcr
 	puls	x,pc

@@ -1,5 +1,6 @@
 	include "zombie.def"
 
+	export 	ip_init
 	export	ip_in
 	export	ip_out
 	export	ipaddr
@@ -18,18 +19,18 @@
 
 	.area	.data
 	rmb	47		; todo: fixme: for sending settings
-ipaddr	.db	0,0,0,0		; our IP address
-ipmask	.db	0,0,0,0		; our netmask
-ipbroad	.db	0,0,0,0		; our broadcast address (calculated)
-ipnet	.db	0,0,0,0		; our local network address (calculated)
-gateway	.db	0,0,0,0		; our IP gateway / router
-dns	.db	0,0,0,0		; our dns server
+ipaddr	rmb	4		; our IP address
+ipmask	rmb	4		; our netmask
+ipbroad	rmb	4		; our broadcast address (calculated)
+ipnet	rmb	4		; our local network address (calculated)
+gateway	rmb	4		; our IP gateway / router
+dns	rmb	4		; our dns server
 
-dipaddr .db	-1,-1,-1,-1		; destination ip address
-proto	.db	17			; layer 4 protocol (udp)
-ripaddr	.db	0,0,0,0			; most recv packet source ip (remote)
-rlen	.dw	0			; length of recv packet PDU 
-	
+dipaddr rmb	4		; destination ip address
+proto	rmb	1		; layer 4 protocol (udp)
+ripaddr	rmb	4		; most recv packet source ip (remote)
+rlen	rmb	2		; length of recv packet PDU 
+end	
 	.area	.code
 
 
@@ -37,40 +38,40 @@ rlen	.dw	0			; length of recv packet PDU
 ;;; sets ip address
 ;;;   takes X - ptr to ip4 address
 	ldd	,x
-	std	ipaddr
+	std	ipaddr,pcr
 	ldd	2,x
-	std	ipaddr+2
+	std	ipaddr+2,pcr
 	rts
 
 ;;; sets ip network address
 ;;;   takes X - ptr to mask
 ip_setmask:
 	ldd	,x
-	std	ipmask
+	std	ipmask,pcr
 	ldd	2,x
-	std	ipmask+2
+	std	ipmask+2,pcr
 	;; calculate broadcast address
-	ldd	ipmask
+	ldd	ipmask,pcr
 	coma
 	comb
-	ora	ipaddr
-	orb	ipaddr+1
-	std	ipbroad
-	ldd	ipmask+2
+	ora	ipaddr,pcr
+	orb	ipaddr+1,pcr
+	std	ipbroad,pcr
+	ldd	ipmask+2,pcr
 	coma
 	comb
-	ora	ipaddr+2
-	orb	ipaddr+3
-	std	ipbroad+2
+	ora	ipaddr+2,pcr
+	orb	ipaddr+3,pcr
+	std	ipbroad+2,pcr
 	;; calculate network address
-	ldd	ipmask
-	anda	ipaddr
-	andb	ipaddr+1
-	std	ipnet
-	ldd	ipmask+2
-	anda	ipaddr+2
-	andb	ipaddr+3
-	std	ipnet+2
+	ldd	ipmask,pcr
+	anda	ipaddr,pcr
+	andb	ipaddr+1,pcr
+	std	ipnet,pcr
+	ldd	ipmask+2,pcr
+	anda	ipaddr+2,pcr
+	andb	ipaddr+3,pcr
+	std	ipnet+2,pcr
 	rts
 
 ip_cmp:
@@ -83,6 +84,11 @@ ip_cmp:
 out@	puls	y,u,pc
 
 
+ip_init:
+	leay	ipaddr,pcr
+	ldb	#end-ipaddr
+	lbra	memclr
+	rts
 
 ;;; Process incoming layer 3 ip packets
 ;;;   takes: X - ptr layer 2 pdu (start of ip header)
@@ -99,24 +105,24 @@ ip_in:
 	lbne	ip_drop
 	;; check dest ip address if not any address (0,0,0,0)
 	;; then only accept packets with our IP
-	ldd	ipaddr
+	ldd	ipaddr,pcr
 	bne	a@
-	ldd	ipaddr+2
+	ldd	ipaddr+2,pcr
 	bne	a@
 	bra	cont@
 a@	leau	16,x
-	ldy	#ipaddr		; is our ip?
-	jsr	ip_cmp
+	leay	ipaddr,pcr
+	lbsr	ip_cmp
 	beq	cont@
-	ldy	#ipbroad	; is broadcast ip?
-	jsr	ip_cmp
+	leay	ipbroad,pcr
+	lbsr	ip_cmp
 	beq	cont@
 	lbra	ip_drop
 	;; packet looks good
 cont@	ldd	12,x		; save source ip for use later
-	std	ripaddr
+	std	ripaddr,pcr
 	ldd	14,x
-	std	ripaddr+2
+	std	ripaddr+2,pcr
 	ldb	,x		; get vers/length
 	andb	#$f		; just length
 	lslb			; multiply by four
@@ -126,7 +132,7 @@ cont@	ldd	12,x		; save source ip for use later
 	pshs	d
 	ldd	2,x
 	subd	,s++
-	std	rlen
+	std	rlen,pcr
 	puls	b
 	lda	9,x		; get packet type
 	abx			; x is start of layer four
@@ -139,12 +145,14 @@ cont@	ldd	12,x		; save source ip for use later
 	lbra	ip_drop
 
 
+
+	export	ip_out
 ip_out:
 	addd	#20
 	leax	-20,x
 	std	2,x		; save length
 	ldd	#$800
-	std	type
+	std	type,pcr
 	ldd	#$4500		; fill out ver/len/ecn
 	std	,x
 	ldd	#$0000		; clear id/flgs/offset/cksum
@@ -152,58 +160,27 @@ ip_out:
 	std	6,x
 	std	10,x
 	lda	#$40
-	ldb	proto
+	ldb	proto,pcr
 	std	8,x
 	;; fill in src/dst ip
-	ldd	ipaddr
+	ldd	ipaddr,pcr
 	std	12,x
-	ldd	ipaddr+2
+	ldd	ipaddr+2,pcr
 	std	14,x
-	ldd	dipaddr
-	std	16,x
-	ldd	dipaddr+2
-	std	18,x
-	;; calc cksum
-	ldy	#20
-	ldd	#0
-	jsr	ip_cksum
-	std	10,x
-	ldd	2,x
-	jmp	eth_out
-
-	export	ip_out2
-ip_out2:
-	addd	#20
-	leax	-20,x
-	std	2,x		; save length
-	ldd	#$800
-	std	type
-	ldd	#$4500		; fill out ver/len/ecn
-	std	,x
-	ldd	#$0000		; clear id/flgs/offset/cksum
-	std	4,x
-	std	6,x
-	std	10,x
-	lda	#$40
-	ldb	proto
-	std	8,x
-	;; fill in src/dst ip
-	ldd	ipaddr
-	std	12,x
-	ldd	ipaddr+2
-	std	14,x
-	ldy	conn
+	ldy	conn,pcr
 	ldd	C_DIP,y
+	std	dipaddr,pcr
 	std	16,x
 	ldd	C_DIP+2,y
+	std	dipaddr+2,pcr
 	std	18,x
 	;; calc cksum
 	ldy	#20
 	ldd	#0
-	jsr	ip_cksum
+	lbsr	ip_cksum
 	std	10,x
 	ldd	2,x
-	jmp	eth_out
+	lbra	eth_out
 
 ;;; ipv4 checksum
 ;;;   takes X = pointer to data

@@ -31,9 +31,9 @@ rand	rmb	2		; random number
 freebuff
 	pshs	cc,u
 	orcc	#$10
-	ldu	fptr
+	ldu	fptr,pcr
 	stx	,--u
-	stu	fptr
+	stu	fptr,pcr
 	inc	fno
 	puls	cc,u,pc
 
@@ -45,12 +45,12 @@ freebuff
         export	getbuff
 getbuff	pshs	cc,u
 	orcc	#$10
-	tst	fno
+	tst	fno,pcr
 	beq	err@
-	ldu	fptr
+	ldu	fptr,pcr
 	ldx	,u++
-	stu	fptr
-	dec	fno
+	stu	fptr,pcr
+	dec	fno,pcr
 	puls	cc
 	clra
 	puls	u,pc
@@ -63,8 +63,8 @@ err@	puls	cc
 	export	ip_drop
 ip_drop:
 	pshs	x
-	ldx	inbuf
-	jsr	freebuff
+	ldx	inbuf,pcr
+	lbsr	freebuff
 	puls	x,pc
 	
 ;;; init stack
@@ -72,22 +72,24 @@ ip_drop:
 ip6809_init
 	;; set random number seed
 	ldd     #42
-	std	rand
+	std	rand,pcr
 	;; clear socket/connection table
-	ldy	#tab
+	leay	tab,pcr
 	ldb	#tabe-tab
-	jsr	memclr
+	lbsr	memclr
 	;; init our data area
-	ldd    	#fptr
-	std	fptr
-	clr	fno
+	leax	fptr,pcr
+	stx	fptr,pcr
+	clr	fno,pcr
 	;; reset our pol timer
 	ldb	#7		; fixme: should be set by something else?
-	stb	itime
-	stb	time
+	stb	itime,pcr
+	stb	time,pcr
 	;; init subsystems
-	jsr	 udp_init
-	jsr	 tcp_init
+	lbsr	eth_init
+	lbsr	ip_init
+	lbsr	udp_init
+	lbsr	tcp_init
 	rts
 
 ;;; get a socket
@@ -96,7 +98,7 @@ ip6809_init
         export	socket
 socket	pshs	x
 	lda	#8
-	ldx	#tab
+	leax	tab,pcr
 loop@	tst	C_FLG,x
 	beq	found@
 	leax	C_SIZE,x
@@ -104,11 +106,11 @@ loop@	tst	C_FLG,x
 	bne	loop@
 	coma
 	puls	x,pc
-found@	stx	conn
+found@	stx	conn,pcr
 	stb	,x
 	leay	1,x
 	ldb	#C_SIZE-1
-	jsr	memclr
+	lbsr	memclr
 	clra
 	puls	x,pc
 
@@ -118,30 +120,30 @@ found@	stx	conn
         export	send
 send	; fixme: distribute to known protocols here
 	; for now just udp
-	jmp	udp_out2
+	lbra	udp_out
 
 
 ;;; closes a socket
 ;;;    takes conn
 ;;;    returns nothing
        	export close
-close   clr    [conn]	; exciting!
+close   clr    [conn,pcr]	; exciting!
 	rts
 
 
 ;;; call this every tick
         export tick
-tick	jsr    lfsr
-	ldy    conn
-	ldx    inbuf		; push current working socket
+tick	lbsr   lfsr
+	ldy    conn,pcr
+	ldx    inbuf,pcr	; push current working socket
 	pshs   x,y
 	;; iterate through each socket
 	;; decrementing timer, and calling it's callback
 	;; if zero
-	jsr    for_sock
-a@	jsr    next_sock
+	lbsr    for_sock
+a@	lbsr    next_sock
 	bcs    poll@		; fixme: or should we goto poll?
-	ldx    conn
+	ldx    conn,pcr
 	ldd    C_TIME,x
 	beq    a@
 	subd   #1
@@ -153,23 +155,24 @@ a@	jsr    next_sock
 	jsr    ,y
 	bra    a@
 	;; poll device
-poll@	dec    time		; decrement poll timer
+	export debug
+poll@	dec    time,pcr		; decrement poll timer
 	bne    out@
-b@	jsr    getbuff		; set buffer to new one
+b@	lbsr   getbuff		; set buffer to new one
 	bcs    out@
-	stx    inbuf
-	jsr    dev_poll
+debug	stx    inbuf,pcr
+	lbsr   dev_poll
 	bcs    p@
-	ldx    inbuf
-	jsr    eth_in
+	ldx    inbuf,pcr
+	lbsr   eth_in
 	bra    b@
-p@	ldx    inbuf
-	jsr    freebuff
-	ldb    itime		; reset pause timer
-	stb    time
+p@	ldx    inbuf,pcr
+	lbsr    freebuff
+	ldb    itime,pcr	; reset pause timer
+	stb    time,pcr
 out@	puls   x,y
-	stx    inbuf
-	sty    conn
+	stx    inbuf,pcr
+	sty    conn,pcr
 	rts
 
 
@@ -177,36 +180,38 @@ out@	puls   x,y
         export	for_sock
 for_sock
 	pshs	x
-	ldx	#tab-C_SIZE
-	stx	conn
+	leax	tab-C_SIZE,pcr
+	stx	conn,pcr
 	puls	x,pc
 
 ;;; goto next socket
 ;;;    takes: nothing
-;;;    returns: X/conn = next used socket, set C on none left
+;;;    returns: conn = next used socket, set C on none left
     	export next_sock 
 next_sock
 	pshs	x
-	ldx	conn
+	leax	tabe,pcr
+	pshs	x
+	ldx	conn,pcr
 ns1	leax	C_SIZE,x
-	cmpx	#tabe
+	cmpx	,s		; fixme: NOT PIC
 	beq	nf@
 	tst	,x
 	beq	ns1
-	stx	conn
+	stx	conn,pcr
 	clra
-	puls	x,pc
+	puls	d,x,pc
 nf@	coma
-	puls	x,pc
+	puls	d,x,pc
 
 
 
 ;; tick LFSR
 lfsr
-	ldd	rand
+	ldd	rand,pcr
 	lsra
 	rorb
 	bcc	a@
 	eora	#$b4
-a@	std	rand
+a@	std	rand,pcr
 	rts

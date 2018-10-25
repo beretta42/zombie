@@ -1,4 +1,3 @@
-
 ;;;
 ;;; Some common definitions
 ;;;
@@ -7,14 +6,15 @@ dev_send	extern
 dev_poll	extern
 dev_init	extern	
 
+arp_init	extern
 arp_in		extern
 arp_resolve	extern
 memclr		extern
 memcpy		extern
 
+ip_init		extern
 ip_in		extern
 ip_out		extern
-ip_out2		extern
 ip_cmp		extern
 ip_cksum	extern
 ip_setmask	extern
@@ -30,6 +30,7 @@ dns		extern
 ipaddr		extern
 
 
+eth_init	extern
 eth_in		extern
 eth_out		extern
 mac		extern
@@ -41,7 +42,6 @@ cmp_mac		extern
 udp_init	extern
 udp_in		extern
 udp_out		extern
-udp_out2	extern
 sport		extern
 dport		extern
 pdu		extern

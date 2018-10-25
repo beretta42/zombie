@@ -7,10 +7,13 @@
 
 	export	ans
 
+DNSTO	equ	3*60		; 2 second timeout
+	
 	.area	.data
 retry	rmb	1		; send this many queries, max
 ans	rmb	4		; resolved address, if any
-flag	rmb	1		; 
+flag	rmb	1		;
+qptr	rmb	2		; ptr to query text name
 
 	.area	.code
 
@@ -20,30 +23,31 @@ flag	rmb	1		;
 ;;;   returns C set on error
       export  resolve
 resolve
+	stx	qptr,pcr
 	ldb	#3
-	stb	retry
-	clr	flag
+	stb	retry,pcr
+	clr	flag,pcr
 	;; make and bind socket - DNS
 	ldb	#C_UDP	 	; socket is a UDP
-	jsr	socket
+	lbsr	socket
 	bcs	bad@		; handle running out of sockets
-	ldx	conn		; conn is newly opened sockets
-	ldd	dns		; set IP to system dns server
+	ldx	conn,pcr	; conn is newly opened sockets
+	ldd	dns,pcr		; set IP to system dns server
 	std	C_DIP,x		; our DNS server from dns
-	ldd	dns+2
+	ldd	dns+2,pcr
 	std	C_DIP+2,x
 	ldd	#53		; port 53 - dns
 	std	C_DPORT,x
-	ldd	#4*60		; timeout socket at 2 secs fixme: change to 2
+	ldd	#DNSTO		; timeout socket at 2 secs
 	std	C_TIME,x
-	ldd	#call		; "call" is our callback (below)
-	std	C_CALL,x
-	jsr	query		; send initial query
-a@	tst	flag
+	leay	call,pcr
+	sty	C_CALL,x
+	bsr	query		; send initial query
+a@	tst	flag,pcr
 	beq	a@
-out@	jsr	close
+out@	lbsr	close
 	ldb	#1
-	cmpb	flag
+	cmpb	flag,pcr
 	rts
 bad@	coma
 	rts
@@ -51,12 +55,13 @@ bad@	coma
 
 	export	query
 ;; send query packet to server
-query 
-	jsr	getbuff
+query
+	lbsr	getbuff
+	bcs	err@	
 	pshs	x
 	leax	47,x		; leave room for lower layer
 	pshs	x
-	ldd	mac+2		; use our mac as a ID field
+	ldd	mac+2,pcr	; use our mac as a ID field
 	std	,x++
 	ldd	#$0100		; recursive search
 	std	,x++		; and a bunch of other stuff
@@ -75,16 +80,13 @@ query
 	tfr	x,d		; calc length
 	subd	,s
 	puls	x		; get pdu back
-	jsr	send
+	lbsr	send
 	puls	x
-	jsr	freebuff
-	rts
-
-name	fcn	"www.play-classics.net"
-	.db	0
-
+	lbra	freebuff
+err@	rts
+	
 appname
-	ldy	#name
+	ldy	qptr,pcr
 a@	leau	,x+
 	clrb
 b@	lda	,y+
@@ -104,9 +106,9 @@ out@	stb	,u+
 call	cmpb	#C_CALLTO
 	beq	to@
 	;; filter out bad answers
-	ldx	pdu
+	ldx	pdu,pcr
 	ldd	,x		; is our ID?
-	cmpd	mac+2
+	cmpd	mac+2,pcr
 	bne	out@
 	ldd	2,x		; is a reponse?
 	bita	#$80
@@ -127,18 +129,20 @@ next@	leau	4,u		; skip over type/class
 ans@	bsr	skip
 c@	leau	10,u
 	ldd	,u++
-	std	ans
+	std	ans,pcr
 	ldd	,u
-	std	ans+2
-	inc	flag
-out@	rts	
-to@	dec	retry
+	std	ans+2,pcr
+	inc	flag,pcr
+out@	lbra	ip_drop
+to@	dec	retry,pcr
 	beq	err@
-	jsr	query
-	rts
-err@	inc	flag
-	inc	flag
-	rts
+	ldy	conn,pcr
+	ldd	#DNSTO
+	std	C_TIME,y
+	lbra	query
+err@	inc	flag,pcr
+	inc	flag,pcr
+	bra	out@
 
 ;; skips over name
 skip

@@ -18,21 +18,21 @@ icmp_in:
 	lbra	ip_drop
 pong:
 	ldb	#1		; icmp protocol's number
-	stb	proto
-	ldd	ripaddr		; copy received address
-	std	dipaddr
-	ldd	ripaddr+2
-	std	dipaddr+2
+	stb	proto,pcr
+	ldd	ripaddr,pcr	; copy received address
+	std	dipaddr,pcr
+	ldd	ripaddr+2,pcr
+	std	dipaddr+2,pcr
 	clra			; clear out header
 	clrb
 	std	,x		; make packet a reply
 	std	2,x		; zero out cksum
-	;; calc cksum
-	ldy	rlen		; fixme: shouldn't ip_out do the cksum for us?
+	;; recalc icmp cksum
+	ldy	rlen,pcr
 	ldd	#0
-	jsr	ip_cksum
+	lbsr	ip_cksum
 	std	2,x
 	;; send to ip
-	ldd	rlen
-	jsr	ip_out
+	ldd	rlen,pcr
+	lbsr	ip_out
 	lbra	ip_drop

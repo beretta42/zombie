@@ -11,47 +11,47 @@ eport	rmb    2		; next ephemeral port no.
 ;;;   takes: conn = socket
     	export tcp_connect
 tcp_connect
-	ldx	conn
+	ldx	conn,pcr
 	;; if ephemeral ports isn't set up
 	;; then set.
-	ldd	eport
+	ldd	eport,pcr
 	bne	b@
-	ldd	rand
+	ldd	rand,pcr
 	ora	#$c0
-	std	eport
+	std	eport,pcr
 b@	;; if our local port is 0 then pick an ephemeral port
 	ldd     C_SPORT,x
 	bne	c@
-	jsr	ephem
+	lbsr	ephem
 	;; set new sequence to a random number
-c@	ldd	rand		
+c@	ldd	rand,pcr	
 	std	C_SNDN,x
-	jsr	lfsr
-	ldd	rand
+	lbsr	lfsr
+	ldd	rand,pcr
 	std	C_SNDN+2,x
 	;; set timeout, callback, retries
 	ldd	#60		; time out
 	std	C_TIME,x
-	ldd	#cb_ssent	; waiting for syn/ack callback
-	std	C_CALL,x
-	clr	flag
+	leay	cb_ssent,pcr
+	sty	C_CALL,x
+	clr	flag,pcr
 	ldb	#3
-	stb	retry
-	jsr	tcp_syn
-a@	ldb	flag
+	stb	retry,pcr
+	lbsr	tcp_syn
+a@	ldb	flag,pcr
 	beq	a@
 	ldb	#1
-	cmpb	flag
+	cmpb	flag,pcr
 	rts
 
 
 ephem:	pshs	x
-	ldx	conn		; stack conn ptr
+	ldx	conn,pcr	; stack conn ptr
 	pshs	x
-a@	jsr	for_sock	; start iterating
-b@	jsr	next_sock
+a@	lbsr	for_sock	; start iterating
+b@	lbsr	next_sock
 	bcs	out@
-	ldd	eport
+	ldd	eport,pcr
 	cmpd	C_SPORT,x	; get src port of socket
 	bne	b@		; no then check next socket
 	addd	#1		; yes then try next port
@@ -60,11 +60,11 @@ b@	jsr	next_sock
 s@	std	eport		; save in eport
 	bra	a@		; start socket scan afresh
 out@	puls	x		; restore conn ptr
-	stx	conn
-	ldd	eport
+	stx	conn,pcr
+	ldd	eport,pcr
 	std	C_SPORT,x	; save 
 	addd	#1
-	std	eport
+	std	eport,pcr
 	puls	x,pc
 
 
@@ -72,8 +72,8 @@ out@	puls	x		; restore conn ptr
 ;; callback for established state
         export	cb_estab
 cb_estab
-	ldx	hptr
-	ldy	conn
+	ldx	hptr,pcr
+	ldy	conn,pcr
 	cmpb	#C_CALLTO
 	lbeq	to@
 	;; check for reset here
@@ -98,20 +98,20 @@ e@	ldd	4,x   	    ; check msb of seq
 	cmpd	C_SNDN+2,y
 	bne	d@
 	ldx	C_SNDB,y
-	jsr	freebuff
+	lbsr	freebuff
 	clr	C_SNDZ,y
 	clr	C_SNDZ+1,y
 	;; if the receive buffer is free
 	;; then store store this buffer
-d@	ldd	pdulen
+d@	ldd	pdulen,pcr
 	beq	b@
 	ldd	C_RCVZ,y
 	lbne	tcp_ack
-	ldd	pdu
+	ldd	pdu,pcr
 	std	C_RCVD,y
-	ldd	pdulen
+	ldd	pdulen,pcr
 	std	C_RCVZ,y
-	ldd	inbuf
+	ldd	inbuf,pcr
 	stx	C_RCVB,y
 	;; adjust for next
 c@	ldd	C_RCVZ,y
@@ -122,12 +122,12 @@ c@	ldd	C_RCVZ,y
 	adca	#0
 	std	C_RCVN,y
 	;; if final send ack
-b@	ldx     hptr
+b@	ldx     hptr,pcr
 	ldb	13,x
 	bitb	#1
 	beq	a@
 	;; fin packet counts as one sequence byte
-	ldy     conn
+	ldy     conn,pcr
 	clr	C_TFLG2,y
 	ldd	C_RCVN+2,y
 	addd	#1
@@ -136,14 +136,14 @@ b@	ldx     hptr
 	adcb	#0
 	adca	#0
 	std	C_RCVN,y
-a@	jsr	tcp_ack
+a@	lbsr	tcp_ack
 	rts
 	;; timeout received for this socket
 	;; if send buffer is full then resend it
 	;; if not then just reset timer
 to@	ldd     C_SNDZ,y
 	beq	s@
-	jsr	tcp_tx
+	lbsr	tcp_tx
 s@	ldd	#60
 	std	C_TIME,y
 	rts
@@ -154,14 +154,14 @@ s@	ldd	#60
 cb_ssent
 	cmpb	#C_CALLTO
 	beq	to@
-	ldx	hptr
-	ldy	conn
+	ldx	hptr,pcr
+	ldy	conn,pcr
 	;; if a reset then flag closed, stop this callback,
 	ldb	13,x
 	bitb	#$4
 	beq	a@
-	inc	flag
-	inc	flag
+	inc	flag,pcr
+	inc	flag,pcr
 	ldd	#0
 	std	C_CALL,y
 	rts
@@ -172,31 +172,31 @@ a@	ldd	6,x
 	adcb	#0		; add carry into MSB
 	adca	#0
 	std	C_RCVN,y
-	jsr	tcp_ack
-	ldy	conn
-	ldd	#cb_estab	; go to established state
+	lbsr	tcp_ack
+	ldy	conn,pcr
+	ldd	#cb_estab	; go to established state NOT PIC
 	std	C_CALL,y
 	inc	flag
 	rts
-to@	dec	retry
+to@	dec	retry,pcr
 	beq	out1@
-	jsr	tcp_syn
-	ldx	conn
+	lbsr	tcp_syn
+	ldx	conn,pcr
 	ldd	#60
 	std	C_TIME,x
 	rts
-out1@	inc	flag
-	inc	flag
+out1@	inc	flag,pcr
+	inc	flag,pcr
 	rts
 	
 ;;; send a syn
 	export tcp_syn
 tcp_syn
-	jsr	getbuff
+	lbsr	getbuff
 	pshs	x
 	leax	39,x		; todo: check size
 	pshs	x
-	ldy	conn
+	ldy	conn,pcr
 	ldd	C_SPORT,y	; append port nos
 	std	,x++
 	ldd	C_DPORT,y
@@ -225,25 +225,25 @@ tcp_syn
 	ldd	#0
 	std	,x++		; urg ptr
 	ldb	#6
-	stb	proto
+	stb	proto,pcr
 	tfr	x,d
 	subd	,s
 	puls	x
-	jsr	tcp_cksum
-	jsr	ip_out2
+	lbsr	tcp_cksum
+	lbsr	ip_out
 	puls	x
-	jmp	freebuff
+	lbra	freebuff
 
 
 ;;; send an ack
 	export tcp_ack
 tcp_ack
-a@	jsr	getbuff
+a@	lbsr	getbuff
 	bcs	a@
 	pshs	x
 	leax	39,x		; todo: check size
 	pshs	x
-	ldy	conn
+	ldy	conn,pcr
 	ldd	C_SPORT,y	; source port
 	std	,x++
 	ldd	C_DPORT,y	; destination port
@@ -265,37 +265,37 @@ a@	jsr	getbuff
 	ldd	#0
 	std	,x++		; urg ptr
 	ldb	#6
-	stb	proto
+	stb	proto,pcr
 	tfr	x,d
 	subd	,s
 	puls	x
-	jsr	tcp_cksum
-	jsr	ip_out2
+	lbsr	tcp_cksum
+	lbsr	ip_out
 	puls	x
-	jmp	freebuff
+	lbra	freebuff
 
 
 ;;; close socket
 ;;;   takes: conn - socket ptr
         export  tcp_close
 tcp_close
-	ldy	conn
+	ldy	conn,pcr
 	;; send FIN
 	ldb	#1		; set fin bit on empty packet
 	stb	C_TFLG,y
 	stb	C_TFLG2,y
 	ldx	#0
 	ldd	#0
-	jsr	tcp_send
+	lbsr	tcp_send
 	;; wait for ack
-	ldy	conn
+	ldy	conn,pcr
 a@	ldd	C_SNDZ,y
 	bne	a@
 	;; clear fin bit
-	ldy	conn		; fin done
+	ldy	conn,pcr	; fin done
 	clr	C_TFLG,y
 	;; and then wait for remote's fin
-	ldy	conn
+	ldy	conn,pcr
 b@	tst	C_TFLG2,y
 	bne	b@
 	clr	,y
@@ -307,7 +307,7 @@ b@	tst	C_TFLG2,y
         export  tcp_recv
 tcp_recv
 	pshs	d,x,y,u
-	ldy	conn
+	ldy	conn,pcr
 	;; wait till there's data
 a@	ldd	C_RCVZ,y
 	beq	a@
@@ -321,9 +321,9 @@ b@	lda	,u+
 	bne	b@
 	;; free recv buffer, clear
 	;; buffer size to allow more data
-	ldy     conn
+	ldy     conn,pcr
 	ldx	C_RCVB,y
-	jsr	freebuff
+	lbsr	freebuff
 	clr	C_RCVZ,y
 	clr	C_RCVZ+1,y
 	puls	d,x,y,u,pc
@@ -338,15 +338,15 @@ b@	lda	,u+
 tcp_send
 	pshs	d,x
 	;; spin until socket's send buffer can be loaded
-	ldy	conn
+	ldy	conn,pcr
 b@	ldd	C_SNDZ,y
 	bne	b@
 	;; get a buffer and fill it out
-	jsr	getbuff
+	lbsr	getbuff
 	pshs	x
 	leax	39,x		; todo: check size
 	pshs	x
-	ldy	conn
+	ldy	conn,pcr
 	ldd	2,s		; save the packet buffer ptr
 	std	C_SNDB,y
 	;; start filling out the packet
@@ -378,7 +378,7 @@ a@	ldb	,u+
 	leay	-1,y
 	bne	a@
 	;; next sequence no = sequence no + segment length
-c@	ldy	conn
+c@	ldy	conn,pcr
 	tfr	x,d
 	subd	,s++		; subtract ptrs to get length
 	addd	C_SNDN+2,y	; add to lsb of seq
@@ -404,25 +404,25 @@ c@	ldy	conn
 	;; figure and set the packet's size 
 e@	tfr	x,d
 	subd	,s
-	ldy	conn
+	ldy	conn,pcr
 	std	C_SNDZ,y
 	leas	8,s
 	;; send it 
-	jmp	tcp_tx
+	lbra	tcp_tx
 
 tcp_tx
-	ldy	conn
+	ldy	conn,pcr
 	ldx	C_SNDB,y
 	leax	39,x
 	ldb	#6
-	stb	proto
+	stb	proto,pcr
 	ldd	C_RCVN,y
 	std	8,x
 	ldd	C_RCVN+2,y
 	std	10,x
 	ldd	C_SNDZ,y
-	jsr	tcp_cksum
-	jmp	ip_out2
+	lbsr	tcp_cksum
+	lbra	ip_out
 
 
 ;; todo: precalculate the relatively static
@@ -430,11 +430,11 @@ tcp_tx
 ;;   takes: X
 tcp_cksum
 	pshs	d,x
-	ldd	ipaddr	
-	addd	ipaddr+2
+	ldd	ipaddr,pcr
+	addd	ipaddr+2,pcr
 	adcb	#0
 	adca	#0
-	ldy	conn
+	ldy	conn,pcr
 	addd	C_DIP,y
 	adcb	#0
 	adca	#0
@@ -447,7 +447,7 @@ tcp_cksum
 	adcb	#0
 	adca	#0
 	ldy	,s
-	jsr	ip_cksum
+	lbsr	ip_cksum
 	std	16,x
 	puls	d,x,pc
 
@@ -455,10 +455,10 @@ tcp_cksum
 	
 	export	tcp_in
 tcp_in	
-	jsr	for_sock
-a@	jsr	next_sock
+	lbsr	for_sock
+a@	lbsr	next_sock
 	lbcs	ip_drop
-	ldy	conn
+	ldy	conn,pcr
 	ldb	C_FLG,y		; is a TCP socket?
 	cmpb	#C_TCP
 	bne	a@
@@ -471,18 +471,18 @@ a@	jsr	next_sock
 	;; fixme: filter for anything else here? (cksum?)
 	;; found our socket
 	;; record pdu / length
-	stx	hptr		; save the header pointer
+	stx	hptr,pcr	; save the header pointer
 	ldb	12,x		; data offset
 	lsrb			; multiply by 4 - header size in bytes
 	lsrb			; (its in top nibble.. so divide by 4 rather)
 	leay	b,x		; add header length to packet base
-	sty	pdu		; and store address to pdu
-	ldy	rlen		; get the length
+	sty	pdu,pcr		; and store address to pdu
+	ldy	rlen,pcr	; get the length
 	negb			; subtract length from ip's length
 	leay	b,y		; 
-	sty	pdulen		; save the length of the tcp segment
+	sty	pdulen,pcr	; save the length of the tcp segment
 	;; call the callback
-	ldx	conn
+	ldx	conn,pcr
 	ldx	C_CALL,x
 	lbeq	ip_drop
 	ldb	#C_CALLRX
@@ -493,6 +493,6 @@ a@	jsr	next_sock
 ;;; initialize the tcp subsystem
         export  tcp_init
 tcp_init
-	clr	eport
-	clr	eport+1
+	clr	eport,pcr
+	clr	eport+1,pcr
 	rts
