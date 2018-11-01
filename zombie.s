@@ -28,6 +28,7 @@ atime	rmb	2		; announce every so often
 	.area	.code
 
 server	fcn	"play-classics.net"
+uname	fcn	"beretta"
 
 ;;; pause
 ;;;   takes D = time in jiffies to wait
@@ -78,10 +79,10 @@ start	orcc	#$50		; turn off interrupts
 	lbcs	error
 	inc	$500
 	;; lookup server
-	leax	server,pcr
-	lbsr	resolve
-	bcc	b@
-	inc	$501
+*	leax	server,pcr
+*	lbsr	resolve
+*	bcc	b@
+*	inc	$501
 	;; setup a socket
 b@	ldb	#C_UDP
 	lbsr	socket
@@ -90,9 +91,10 @@ b@	ldb	#C_UDP
 	std	C_SPORT,x
 	ldd	#6999		; dest port 6999
 	std	C_DPORT,x
-	ldd	ans,pcr
+	ldd	#0xffff
+*	ldd	ans,pcr
 	std	C_DIP,x		; destination IP
-	ldd	ans+2,pcr
+*	ldd	ans+2,pcr
 	std	C_DIP+2,x
 	leay	call,pcr	; attach a callback
 	sty	C_CALL,x
@@ -183,12 +185,19 @@ announce
 	bcs	out@
 	pshs	x
 	leax	47,x		; pad for lower layers (DW+ETH+IP+UDP)
+	pshs	x
 	ldd	#0
-	sta	0,x		; message type
-	std	1,x		; XID
-	std	3,x		; address
-	std	5,x		; size
-	ldd	#7		; size of PDU
+	std	,x++		; message type, return
+	std	,x++		; XID
+	std	,x++		; address
+	std	,x++		; size
+	leau	uname,pcr	; copy user name
+a@	lda	,u+
+	sta	,x+
+	bne	a@
+	tfr	x,d		; calc packet size
+	subd	,s
+	puls	x
 	lbsr	udp_out
 	puls	x
 	lbsr	freebuff

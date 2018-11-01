@@ -30,6 +30,7 @@ struct db_entry {
   int flag;
   struct sockaddr_in addr;
   int cap;
+  char name[16];
   time_t time;
 };
 

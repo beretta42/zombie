@@ -1,4 +1,4 @@
-all: zombie
+all: zombie ns cdig
 
 
 bounce.h: bounce.s
@@ -8,5 +8,11 @@ bounce.h: bounce.s
 zombie: zombie.c bounce.h
 	gcc -o zombie zombie.c -ledit
 
+ns: ns.c
+	gcc -o ns ns.c
+
+cdig: cdig.c
+	gcc -o cdig cdig.c
+
 clean:
-	rm -f *~ zombie bounce bounce.h
+	rm -f *~ zombie bounce bounce.h ns cdig
