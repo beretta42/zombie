@@ -578,6 +578,24 @@ void do_fcn(void)
     }
 }
 
+void help(void)
+{
+    puts("list                          list available cocos");
+    puts("connect [decimal]             connect to a coco");
+    puts("probe                         probe connected coco");
+    puts("dump addr                     dump memory");
+    puts("poke [addr] [hex bytes...]    poke values into memory");
+    puts("exec addr                     execute memory");
+    puts("dasm addr {size}              disassemble memory");
+    puts("reboot                        reboot");
+    puts("load [file]                   load a BIN file");
+    puts("loadf [file] {command line}   load a fuzix kernel");
+    puts("fcn [addr] [string]           put C style string in memory");
+    puts("basic                         execute BASIC line");
+    puts("exit,quit                     exit");
+}
+
+
 /* process user input */
 void input(char *line)
 {
@@ -601,6 +619,7 @@ void input(char *line)
     else if (!strcmp(ptr,"basic")) { do_basic(); return; }
     else if (!strcmp(ptr,"exit")) exit(1);
     else if (!strcmp(ptr,"quit")) exit(1);
+    else if (!strcmp(ptr,"help")) help();
     else
 	printf("error: unrecognized command.\n");
 }
