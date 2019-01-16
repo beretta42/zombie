@@ -390,9 +390,24 @@ void do_reboot(void)
     printf("ok\n");
 }
 
+void do_probe(void)
+{
+    uint8_t c[2];
+    if (send_read(c, 0xfffc, 2)) {
+	fprintf(stderr,"error: command timeout\n");
+	return;
+    }
+    if (c[1] == 0xfe) {
+	printf("CoCo3");
+    }
+    else
+	printf("CoCo2");
+    printf("\n");
+}
+
 
 /* load a fuzix bin */
-int loadf(char *filename)
+int loadf(char *filename, char *cmdline)
 {
     uint8_t h[5];
     int ret;
@@ -448,10 +463,18 @@ int loadf(char *filename)
     }
     exec_addr = htons(addr);
     fclose(f);
-    aa = 0;
-    return  send_write((uint8_t *)&exec_addr,0x4000,2) ||
-	send_write(bounce,0x4002,bounce_len) ||
-	send_write(&saved_mmu,0xffa1,1);
+    /* copy bounce routine down */
+    if (send_write((uint8_t *)&exec_addr,0x4000,2) ||
+	send_write(bounce,0x4002,bounce_len) )
+	return -1;
+    /* copy kernel's commandline to 0x88 */
+    h[0] = 0;
+    if (send_write(h, 0xffa1, 1) ||
+	send_write(cmdline, 0x2088, strlen(cmdline)+1) ||
+	send_write(&saved_mmu, 0xffa1, 1) ) {
+	return -1;
+    }
+    return send_exec(0x4000);
 }
 
 
@@ -498,13 +521,15 @@ int load(char *filename)
 void do_loadf(void)
 {
     char *p;
+    char *c;
 
     p = strtok(NULL, WS);
     if (!p) {
 	fprintf(stderr,"error: filename expected.\n");
 	return;
     }
-    if(loadf(p))
+    c = strtok(NULL, "\n");
+    if(loadf(p, c))
 	fprintf(stderr,"error: command timeout.\n");
 }
 
@@ -563,6 +588,7 @@ void input(char *line)
     if (*ptr == 0) return;
     if (*ptr == '\n') return;
     if (!strcmp(ptr,"list")) { db_list(); return; }
+    else if (!strcmp(ptr,"probe")) { do_probe(); return; }
     else if (!strcmp(ptr,"connect")) { do_connect(); return; }
     else if (!strcmp(ptr,"dump")) { do_dump(); return; }
     else if (!strcmp(ptr,"poke")) { do_poke(); return; }
