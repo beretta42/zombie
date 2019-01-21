@@ -1,4 +1,4 @@
-section .start load 0e00
+section .start load 4500
 section .code
 section .data
 section .end
