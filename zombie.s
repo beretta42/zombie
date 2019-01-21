@@ -147,8 +147,7 @@ a@	ldb	,x+
 	stb	,u+
 	leay	-1,y
 	bne	a@
-	tfr	x,d
-	subd	pdu,pcr
+	ldd	#3
 	ldx	pdu,pcr
 	lbsr	udp_out
 	lbra	ip_drop
