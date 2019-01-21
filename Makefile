@@ -3,13 +3,17 @@ all: zombie.dsk server
 AS = lwasm
 ASFLAGS = -f obj 
 
-SRCS = arp.s ip.s eth.s udp.s icmp.s lwwire.s zombie.s dhcp2.s ip6809.s \
+SRCS = arp.s ip.s eth.s udp.s icmp.s zombie.s dhcp2.s ip6809.s \
 	resolv.s tcp.s
+DRVS = lwwire.s coconic.s
 
 OBJS = $(SRCS:.s=.o)
 
-zombie.bin: $(OBJS)
-	lwlink -b -m zombie.map -s decb.link -o zombie.bin $(OBJS)
+coconic.o: coconic.s
+lwwire.o: lwwire.s
+
+zombie.bin: $(OBJS) coconic.o lwwire.o
+	lwlink -b -m zombie.map -s decb.link -o zombie.bin $(OBJS) coconic.o
 
 zombie.dsk: zombie.bin
 	rm -f zombie.dsk
