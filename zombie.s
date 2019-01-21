@@ -15,7 +15,7 @@ prog_end equ *
 	.area	.data
 insize	rmb	2		; size of packet in input buffer
 inbuf	rmb	2		; pointer to input buffer
-inmax	.dw	$200		; max size of input buffer
+inmax	.dw	576+14+5	; max size of input buffer
 
 
 stack	rmb	64		; a private stack
@@ -91,10 +91,11 @@ b@	ldb	#C_UDP
 	std	C_SPORT,x
 	ldd	#6999		; dest port 6999
 	std	C_DPORT,x
-	ldd	#0xffff
+	ldd	ipbroad,pcr
 *	ldd	ans,pcr
 	std	C_DIP,x		; destination IP
 *	ldd	ans+2,pcr
+	ldd	ipbroad+2,pcr
 	std	C_DIP+2,x
 	leay	call,pcr	; attach a callback
 	sty	C_CALL,x
