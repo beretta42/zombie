@@ -6,6 +6,7 @@ dev_send	extern
 dev_poll	extern
 dev_init	extern	
 
+arp_setbroad	extern
 arp_init	extern
 arp_in		extern
 arp_resolve	extern

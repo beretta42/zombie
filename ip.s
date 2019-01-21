@@ -62,6 +62,8 @@ ip_setmask:
 	ora	ipaddr+2,pcr
 	orb	ipaddr+3,pcr
 	std	ipbroad+2,pcr
+	leax	ipbroad,pcr
+	lbsr	arp_setbroad
 	;; calculate network address
 	ldd	ipmask,pcr
 	anda	ipaddr,pcr

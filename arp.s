@@ -5,6 +5,7 @@
 	export	memcpy
 	export	memclr
 	export  arp_resolve
+	export  arp_setbroad
 	
 ;;;  ARP local database
 ;;;    todo: timestamp needed?
@@ -29,7 +30,7 @@ mirror	.db	1
 	.db	255,255,255,255
 	.db	1
 	.dw	$ffff,$ffff,$ffff
-	.db	192,168,42,255 	; todo: set arp table for local broacast
+broad	.db	192,168,42,255 	; todo: set arp table for local broacast
 mirrore
 	
 
@@ -46,6 +47,13 @@ a@	clr	,y+
 	bne	a@
 	rts
 
+;;; set the broadcast ip to eth mapping
+arp_setbroad:
+	ldd	,x++
+	std	broad,pcr
+	ldd	,x++
+	std	broad+2,pcr
+	rts
 
 ;;; initialize the arp sub-system
 arp_init:
