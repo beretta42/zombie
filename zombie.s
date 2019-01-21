@@ -42,7 +42,6 @@ irq_handle
 	lda	$ff02		; clear pia
 	sts	sstack,pcr
 	leas	stacke,pcr
-	inc	$400		; tick screen fixme: remove
 	;; increment time
 	ldd	time,pcr
 	addd	#1
@@ -77,7 +76,7 @@ start	orcc	#$50		; turn off interrupts
 	;; dhcp
 	lbsr	dhcp_init
 	lbcs	error
-	inc	$500
+	lbsr	print
 	;; lookup server
 *	leax	server,pcr
 *	lbsr	resolve
@@ -203,3 +202,49 @@ a@	lda	,u+
 	puls	x
 	lbsr	freebuff
 out@	rts
+
+
+cr	pshs	a
+	lda	#$d
+	jsr	$a282
+	puls	a,pc
+
+;;; print ipv4 settings
+print
+	leax	a@-1,pcr
+	jsr	$b99c
+	leax	ipaddr,pcr
+	lbsr	ipprint
+	bsr	cr
+	leax	b@-1,pcr
+	jsr	$b99c
+	leax	ipmask,pcr
+	lbsr	ipprint
+	bsr	cr
+	leax	c@-1,pcr
+	jsr	$b99c
+	leax	ipbroad,pcr
+	lbsr	ipprint
+	bsr	cr
+	leax	d@-1,pcr
+	jsr	$b99c
+	leax	ipnet,pcr
+	lbsr	ipprint
+	bsr	cr
+	leax	e@-1,pcr
+	jsr	$b99c
+	leax	gateway,pcr
+	lbsr	ipprint
+	bsr	cr
+	leax	f@-1,pcr
+	jsr	$b99c
+	leax	dns,pcr
+	lbsr	ipprint
+	bsr	cr
+	rts
+a@	fcn	"IPADDR    "
+b@	fcn	"NETMASK   "
+c@	fcn	"BROADCAST "
+d@	fcn	"NETADDR   "
+e@	fcn	"GATEWAY   "
+f@	fcn	"DNS       "

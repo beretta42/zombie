@@ -107,6 +107,9 @@ close	        extern
 ; call once per tick
 tick   	    	extern
 
+;;; print a ip address/mask
+;;;    takes X - ip addr ptr
+ipprint	        extern
 
 ;  This structure represents a logical connection
 ;  'conn' points to one of these

@@ -215,3 +215,24 @@ lfsr
 	eora	#$b4
 a@	std	rand,pcr
 	rts
+
+
+;;; print a ip address/mask
+;;;    takes X - ip addr ptr
+	export	ipprint
+ipprint
+	pshs	d,x,u
+	lda	#4
+	sta	,-s
+	bra	b@
+a@	lda	#'.
+	jsr	$a282
+b@	clra
+	ldb	,x+
+	pshs	x
+	jsr	$bdcc
+	puls	x
+	dec	,s
+	bne	a@
+	leas	1,s
+	puls	d,x,u,pc
