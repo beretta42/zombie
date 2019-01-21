@@ -50,9 +50,9 @@ a@	clr	,y+
 ;;; set the broadcast ip to eth mapping
 arp_setbroad:
 	ldd	,x++
-	std	broad,pcr
+	std	adb+broad-mirror,pcr
 	ldd	,x++
-	std	broad+2,pcr
+	std	adb+broad-mirror+2,pcr
 	rts
 
 ;;; initialize the arp sub-system
