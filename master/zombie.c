@@ -86,6 +86,8 @@ void db_add(struct sockaddr_in *addr)
 	if (db[x].flag == DF_EMPTY){
 	    memcpy(&db[x].addr, addr, sizeof(struct sockaddr_in));
 	    db[x].cap = 0;
+	    strncpy(db[x].name, buf + 8, 16);
+	    db[x].name[15]=0;
 	    goto out;
 	}
     }
@@ -104,7 +106,8 @@ void db_list(void)
 	if (db[x].flag != DF_EMPTY){
 	    printf("%c[%d] %s ", x == conn ? '*' : ' ',
 		   x, inet_ntoa(db[x].addr.sin_addr) );
-	    printf("%c\n", (db[x].flag == DF_IFFY) ? '?' : ' ');
+	    printf("%c", (db[x].flag == DF_IFFY) ? '?' : ' ');
+	    puts(db[x].name);
 	}
     }
 }
