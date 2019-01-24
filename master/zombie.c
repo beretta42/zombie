@@ -400,7 +400,7 @@ void do_probe(void)
 	fprintf(stderr,"error: command timeout\n");
 	return;
     }
-    if (c[1] == 0xfe) {
+    if (c[0] == 0xfe) {
 	printf("CoCo3");
     }
     else
