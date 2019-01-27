@@ -1,3 +1,11 @@
+/* A simple zombie master
+   TODO:  factor out network error handling code
+
+
+ */
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -146,7 +154,7 @@ int send_trans(int len, int flag)
     int retry = 3;
     int ret;
     int x;
-  
+
     while (retry--) {
 	sendto(sd,obuf,len,0,
 	       (struct sockaddr *)&db[conn].addr,
@@ -243,7 +251,7 @@ void do_dasm(void)
     char d[80];
     int l;
     int i;
-  
+
     p = strtok(NULL,WS);
     if (!p) {
 	fprintf(stderr,"error: address expected.\n");
@@ -255,7 +263,7 @@ void do_dasm(void)
 	return;
     }
     p = strtok(NULL, WS);
-    l = p ? strtol(p,NULL,16) : 0x30; 
+    l = p ? strtol(p,NULL,16) : 0x30;
     if (send_read(tbuf, x, l)){
 	fprintf(stderr,"error: command timeout.\n");
 	return;
@@ -289,8 +297,8 @@ void do_dump(void)
     int l;
     int i;
     int j;
-  
-  
+
+
     p = strtok(NULL,WS);
     if (!p) {
 	fprintf(stderr,"error: address expected.\n");
@@ -303,7 +311,7 @@ void do_dump(void)
     }
     p = strtok(NULL,WS);
     l = p ? strtol(p,NULL,16) : 0x40;
-  
+
     if (send_read(tbuf, x, l)){
 	fprintf(stderr,"error:command timeout.\n");
 	return;
@@ -321,7 +329,7 @@ void do_dump(void)
 	    if (j+i < l)
 		printf("%c", printable(tbuf[j+i]));
 	}
-    }    
+    }
     printf("\n");
 }
 
@@ -424,7 +432,7 @@ int loadf(char *filename, char *cmdline)
     uint8_t saved_mmu;
     uint16_t exec_addr;
 
-    /* we need to check if client is a coco3! */
+    /* fixme: we need to check if client is a coco3! */
     /* we also should calculate the needed bank */
 
     FILE *f = fopen(filename, "r");
@@ -481,6 +489,130 @@ int loadf(char *filename, char *cmdline)
 }
 
 
+int load9(char *filename)
+{
+    uint8_t mmu[8];
+    uint8_t spin[2] = { 0x20, 0xfe }; /* bra -2 */
+    int ret;
+    int len;
+    int slen;
+    int addr;
+    int base;
+    int todo;
+    int l;
+    uint8_t aa;
+    int room;
+    int offset;
+    uint8_t saved_mmu;
+    uint16_t exec_addr;
+    FILE *f;
+    int x;
+
+    /* fixme: we need to check if client is a coco3! */
+    /* we also should calculate the needed bank */
+
+    /* save existing mmu mapping */
+    if(send_read(&saved_mmu,0xffa1,1))
+	return -1;
+
+    /* turn off ROM */
+    send_write_ll(&aa, 0xffdf, 1);
+
+    /* put other thread on a spin cycle in low memory*/
+    send_write_ll(spin, 0x400, 2);
+    send_exec(0x400);
+
+    /* load OS9BOOT file to f000 - size % 256 */
+    f = fopen(filename, "r");
+    if (!f) {
+	perror("fopen");
+	return -1;
+    }
+    fseek(f,0,SEEK_END);
+    len = ftell(f);
+    slen = len;
+    fseek(f, 0, SEEK_SET);
+    addr = (0xf000 - len) & 0xff00;
+    /* now we know location of os9boot,
+       next figure out the mmu mapping */
+    base = addr >> 13;
+    for (x = 0; x < base; x++)
+	mmu[x] = 0x00;
+    for (x = base; x < 7; x++)
+	mmu[x] = x - base + 1;
+    mmu[7] = 0x3f;
+    /* window copy */
+    todo = len;
+    while (todo){
+	aa = addr >> 13;
+	offset = addr & 0x1fff;
+	room = 0x2000 - offset;
+	if (send_write_ll(mmu + aa, 0xffa1, 1))
+	    return -1;
+	l = BUFLEN < todo ? BUFLEN : todo;
+	l = l < room ? l : room;
+	printf("%.02x %.04x %.04x %.04x\n", mmu[aa], offset, l, 0x2000+offset);
+	fread(tbuf, l, 1, f);
+	if (send_write_ll(tbuf, 0x2000+offset, l))
+	    return -1;
+	addr += l;
+	todo -= l;
+	if (addr == 0x4000) {
+	    aa++;
+	    addr = 0x2000;
+	}
+    }
+    fclose(f);
+
+    /*
+       load CCBKRN file to bank 3f
+    */
+    f = fopen("ccbkrn", "r");
+    if (!f) {
+	perror("fopen");
+	return -1;
+    }
+    fseek(f, 0, SEEK_END);
+    len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (len != 0xf00) {
+	fprintf(stderr,"ccbkrn: wrong size.\n");
+	return -1;
+    }
+    todo = len - 16;  /* last bytes clobbers out interrupt vectors */
+    addr = 0xf000;
+    while (todo){
+	aa = 0x3f;
+	offset = addr & 0x1fff;
+	room = 0x2000 - offset;
+	if (send_write_ll(&aa, 0xffa1, 1))
+	    return -1;
+	l = BUFLEN < todo ? BUFLEN : todo;
+	l = l < room ? l : room;
+	printf("%.02x %.04x %.04x %.04x\n", aa, offset, l, 0x2000+offset);
+	fread(tbuf, l, 1, f);
+	if (send_write_ll(tbuf, 0x2000+offset, l))
+	    return -1;
+	addr += l;
+	todo -= l;
+    }
+    /* get last 16 bytes (mostly coco3 interrupt vectors) */
+    fread(tbuf, 16, 1, f);
+    fclose(f);
+    aa = 0x39;
+    send_write(&aa, 0xffa1, 1);
+    send_write(tbuf, 0x2002,16);
+    aa = slen >> 8;
+    send_write(&aa, 0x2000, 1);
+    aa = slen & 255;
+    send_write(&aa, 0x2001, 1);
+    send_write(bounce09,0x2012,bounce09_len);
+    send_exec(0x2012);
+
+    return 0;
+}
+
+
 int load(char *filename)
 {
     uint8_t h[5];
@@ -489,7 +621,7 @@ int load(char *filename)
     int addr;
     int todo;
     int l;
-  
+
     FILE *f = fopen(filename, "r");
     if (!f) {
 	perror("fopen");
@@ -536,6 +668,19 @@ void do_loadf(void)
 	fprintf(stderr,"error: command timeout.\n");
 }
 
+// load a os9 kernel
+void do_load9(void)
+{
+    char *p;
+
+    p = strtok(NULL, WS);
+    if (!p) {
+	fprintf(stderr, "error: OS9BOOT filename expected.\n");
+	return;
+    }
+    if (load9(p))
+	fprintf(stderr,"error: command timeout.\n");
+}
 
 // do a simple .bin load
 void do_load(void)
@@ -593,6 +738,7 @@ void help(void)
     puts("reboot                        reboot");
     puts("load [file]                   load a BIN file");
     puts("loadf [file] {command line}   load a fuzix kernel");
+    puts("load9 [file]                  load a os9 kernel");
     puts("fcn [addr] [string]           put C style string in memory");
     puts("basic                         execute BASIC line");
     puts("exit,quit                     exit");
@@ -618,6 +764,7 @@ void input(char *line)
     else if (!strcmp(ptr,"reboot")) { do_reboot(); return; }
     else if (!strcmp(ptr,"load")) { do_load(); return; }
     else if (!strcmp(ptr,"loadf")) { do_loadf(); return; }
+    else if (!strcmp(ptr,"load9")) { do_load9(); return; }
     else if (!strcmp(ptr,"fcn")) { do_fcn(); return; }
     else if (!strcmp(ptr,"basic")) { do_basic(); return; }
     else if (!strcmp(ptr,"exit")) exit(1);
@@ -669,7 +816,7 @@ int main(int argc, char *argv[])
     for (x=0; x<16; x++){
 	db[x].flag = DF_EMPTY;
     }
-  
+
     sd = socket(AF_INET, SOCK_DGRAM, 0);
     if (!sd) {
 	perror("socket");
@@ -680,7 +827,7 @@ int main(int argc, char *argv[])
     laddr.sin_port = htons(6999);
 
     raddr.sin_family = AF_INET;
-  
+
     ret = bind(sd, (struct sockaddr *)&laddr, INETZ);
     if (ret){
 	perror("bind");
@@ -714,6 +861,3 @@ int main(int argc, char *argv[])
     close(sd);
     exit(0);
 }
-
-
-

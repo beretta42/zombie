@@ -57,8 +57,13 @@ a@	std	atime,pcr
 	;; call ip6809's ticker
 	lbsr	tick
 	lds	sstack,pcr
-	;; tail call BASIC's normal vector
+	;; is BASIC irq vector set?
+	ldd	ivect,pcr
+	beq	b@
+	;; yes tail call BASIC's normal vector
 	jmp	[ivect]
+	;; no just rti our selfs
+b@	rti
 	
 start	orcc	#$50		; turn off interrupts
 	ldd	#0
@@ -166,6 +171,8 @@ cmd_exec
 	puls	x
 	ldu	sstack,pcr
 	stx	10,u
+	clr	ivect,pcr
+	clr	ivect+1,pcr
 	rts
 
 cmd_reply
