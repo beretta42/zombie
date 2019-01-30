@@ -17,7 +17,7 @@
 #define SIZE_OFF 6
 #define DATA_OFF 8
 #define PORT    6999
-#define BUFLEN  425
+#define BUFLEN  768
 
 uint8_t buf[BUFLEN];
 
