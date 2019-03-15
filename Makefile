@@ -13,7 +13,7 @@ coconic.o: coconic.s
 lwwire.o: lwwire.s
 
 zombie.bin: $(OBJS) coconic.o lwwire.o
-	lwlink -b -m zombie.map -s decb.link -o zombie.bin $(OBJS) coconic.o
+	lwlink -b -m zombie.map -s decb.link -o zombie.bin $(OBJS) lwwire.o
 
 zombie.dsk: zombie.bin
 	rm -f zombie.dsk
