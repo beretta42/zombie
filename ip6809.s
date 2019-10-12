@@ -34,7 +34,7 @@ freebuff
 	ldu	fptr,pcr
 	stx	,--u
 	stu	fptr,pcr
-	inc	fno
+	inc	fno,pcr
 	puls	cc,u,pc
 
 
@@ -82,7 +82,7 @@ ip6809_init
 	stx	fptr,pcr
 	clr	fno,pcr
 	;; reset our pol timer
-	ldb	#7		; fixme: should be set by something else?
+	ldb	#3		; fixme: should be set by something else?
 	stb	itime,pcr
 	stb	time,pcr
 	;; init subsystems
@@ -155,19 +155,19 @@ a@	lbsr    next_sock
 	jsr    ,y
 	bra    a@
 	;; poll device
-	export debug
+debugp
 poll@	dec    time,pcr		; decrement poll timer
 	bne    out@
 b@	lbsr   getbuff		; set buffer to new one
 	bcs    out@
-debug	stx    inbuf,pcr
+	stx    inbuf,pcr
 	lbsr   dev_poll
 	bcs    p@
 	ldx    inbuf,pcr
 	lbsr   eth_in
 	bra    b@
 p@	ldx    inbuf,pcr
-	lbsr    freebuff
+	lbsr   freebuff
 	ldb    itime,pcr	; reset pause timer
 	stb    time,pcr
 out@	puls   x,y
