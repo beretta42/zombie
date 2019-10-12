@@ -1,5 +1,9 @@
 	include "zombie.def"
 
+	import	lsr1
+	import	lsr2
+	import	encrypt
+	
 	export	start
 	export  insize
 	export  inmax
@@ -24,19 +28,17 @@ ivect	rmb	2		; saved BASIC's irq vector
 sstack  rmb	2		; saved entry stack frame
 time	rmb	2		; a ticker
 atime	rmb	2		; announce every so often
+errno	rmb	1		; returned error code from rnp
+replyf  rmb	1		; flipped when irq receives a reply
+tof     rmb     1		; flipped when timed out
+rnpaddr rmb	2		; rnp address
 	
 	.area	.code
 
 server	fcn	"play-classics.net"
-uname	fcn	"beretta"
+uname	fcn	"beretta/zombie"
+pass    fcn     "notapassword"
 
-;;; pause
-;;;   takes D = time in jiffies to wait
-pause
-	addd	time,pcr
-a@	cmpd	time,pcr
-	bne	a@
-	rts
 
 irq_handle
 	lda	$ff02		; clear pia
@@ -75,6 +77,8 @@ start	orcc	#$50		; turn off interrupts
 	stx	$10d
 	lbsr	ip6809_init	; initialize system
 	lbsr	dev_init	; init device
+	ldx	#$3f00
+	lbsr	freebuff
 	ldx	#$4200		; add a buffers to freelist
 	lbsr	freebuff	;
 	andcc	#~$10		; turn on irq interrupt
@@ -83,10 +87,10 @@ start	orcc	#$50		; turn off interrupts
 	lbcs	error
 	lbsr	print
 	;; lookup server
-*	leax	server,pcr
-*	lbsr	resolve
-*	bcc	b@
-*	inc	$501
+	leax	server,pcr
+	lbsr	resolve
+	bcc	b@
+	inc	$501
 	;; setup a socket
 b@	ldb	#C_UDP
 	lbsr	socket
@@ -95,16 +99,17 @@ b@	ldb	#C_UDP
 	std	C_SPORT,x
 	ldd	#6999		; dest port 6999
 	std	C_DPORT,x
-	ldd	ipbroad,pcr
-*	ldd	ans,pcr
+*	ldd	ipbroad,pcr
+	ldd	ans,pcr
 	std	C_DIP,x		; destination IP
-*	ldd	ans+2,pcr
-	ldd	ipbroad+2,pcr
+	ldd	ans+2,pcr
+*	ldd	ipbroad+2,pcr
 	std	C_DIP+2,x
-	leay	call,pcr	; attach a callback
-	sty	C_CALL,x
-	;; send a boot announcement twice...
-	lbsr	announce
+*	leay	call,pcr	; attach a callback
+*	sty	C_CALL,x
+	;; register with relay server
+	lbsr	register
+	;; initialize the timer
 	ldd	#ANN_TO
 	std	atime,pcr
 	;; go back to BASIC
@@ -115,8 +120,14 @@ error	inc	$501
 ;; callback for received datagrams
 ;; just print the udp's data as a string
 call
-	ldx	pdu,pcr
-	ldb	,x
+	ldx	pdu,pcr		; check version / opcode
+	ldd	,x		; get version / opcode
+	cmpd	#$0105		; is correct?
+	lbne	ip_drop		; no then drop
+	ldd	10,x		; check protocol
+	cmpd	#1		; fixme: need some standard protocol nos here
+	lbne	ip_drop
+	ldb	12,x
 	cmpb	#1	; is read ?
 	beq	cmd_read
 	cmpb	#2	; is write?
@@ -144,20 +155,18 @@ a@	ldb	,u+
 cmd_write
 	bsr	cmd_reply
 	ldy	5,x
-	cmpy	#0
-	bhi	debug
+	cmpy	#0		; fixme what to do if zero?
+	beq	c@
 b@	ldu	3,x
 	leax	7,x
 a@	ldb	,x+
 	stb	,u+
 	leay	-1,y
 	bne	a@
-	ldd	#3
+c@	ldd	#15		; rnp header + 3 bytes of zombie header
 	ldx	pdu,pcr
 	lbsr	udp_out
 	lbra	ip_drop
-	export  debug
-debug	bra	b@
 
 
 cmd_exec
@@ -176,14 +185,16 @@ cmd_exec
 	rts
 
 cmd_reply
-	ldy	conn,pcr
-	ldb	,x
-	orb	#$80		; change to reply
-	stb	,x
-	ldd	ripaddr,pcr	; send to host we've recv'd command from
-	std	C_DIP,y
-	ldd	ripaddr+2,pcr
-	std	C_DIP+2,y
+	;; mark as rnp reply
+	ldb	1,x
+	orb	#$80
+	stb	1,x
+	;; flip source / dest address
+	ldd	8,x		; get source rnp address
+	std	6,x		; set dest rnp address
+	ldd	rnpaddr,pcr	; get our address
+	std	8,x		; set source address
+	leax	12,x		; goto beginning of rnp route data
 	rts
 
 announce
@@ -191,25 +202,15 @@ announce
 	bcs	out@
 	pshs	x
 	leax	47,x		; pad for lower layers (DW+ETH+IP+UDP)
-	pshs	x
-	ldd	#0
-	std	,x++		; message type, return
-	std	,x++		; XID
-	std	,x++		; address
-	std	,x++		; size
-	leau	uname,pcr	; copy user name
-a@	lda	,u+
-	sta	,x+
-	bne	a@
-	tfr	x,d		; calc packet size
-	subd	,s
-	puls	x
+	ldd	#0x0106		; version, ping opcode
+	std	,x
+	ldd	#2
 	lbsr	udp_out
 	puls	x
 	lbsr	freebuff
 out@	rts
 
-
+	
 cr	pshs	a
 	lda	#$d
 	jsr	$a282
@@ -254,3 +255,91 @@ c@	fcn	"BROADCAST "
 d@	fcn	"NETADDR   "
 e@	fcn	"GATEWAY   "
 f@	fcn	"DNS       "
+
+
+
+register
+	;;  register our callback
+	ldx	conn,pcr
+	leay	reg_cb,pcr
+	sty	C_CALL,x
+	;;  build a buffer
+e@	lbsr	getbuff		; X = new buffer
+	lbcs	out@		; error
+	pshs	x		; ( buf )
+	leax	47,x		; dw + eth + ip + udp
+	pshs	x		; ( buf udp )
+	ldd	#0x0101		; version, register opcode
+	std	,x
+	leax	12,x		; jump to start of registration data
+	clr	,x+		; zero attribute and encryption type
+	clr	,x		;
+	inc	,x+
+	pshs	x		; ( buf udp pass )
+	leay	pass,pcr	; copy password to buff
+a@	lda	,y+
+	sta	,x+
+	bne	a@
+	ldx	,s		; ( buf udp pass )
+	leax	32,x		; copy username/node to buff
+	leay	uname,pcr
+b@	lda	,y+
+	sta	,x+
+	bne	b@
+	;; encrypt
+	ldd	#$aa5b
+	std	lsr1,pcr
+	ldd	#$33c3
+	std	lsr1+2,pcr
+	ldd	#$534e
+	std	lsr2,pcr
+	ldd	#$2210
+	std	lsr2+2,pcr
+	puls	x		; ( buf udp )
+	ldy	#64
+	lbsr	encrypt
+	ldd	#12+2+64
+	pshs	d
+*	tfr	x,d
+*	subd	,s
+*	pshs	d		; ( buf udp size )
+	;; send buffer
+c@	ldx	conn,pcr	; set timer
+	ldd	#60
+	std	C_TIME,x
+	clr	replyf,pcr	; clear flags
+	clr	tof,pcr
+	ldd	,s		; sendit
+	ldx	2,s
+	lbsr	udp_out
+	;; wait for reply
+d@	tst	tof,pcr
+	bne	c@		; timeout? send again
+	tst	replyf,pcr
+	beq	d@		; no reply? test again
+	;; test result
+	ldb	errno,pcr
+	bne	c@		; error? send again fixme: end this sometime
+	;; connected
+	leas	4,s		; ( buf )
+	puls	x		; ( )
+	lbsr	freebuff
+	ldx	conn,pcr
+	leay	call,pcr
+	sty	C_CALL,x	; set call timer to normal call back
+	clr	C_TIME,x	; clear timer (we'll use our own)
+	clr	C_TIME+1,x	; fixme: should I use my own?
+out@	rts
+reg_cb
+	cmpb	#C_CALLTO
+	beq	to@
+	ldx	pdu,pcr
+	ldd	,x		; drop if not our version
+	cmpd	#$0181		; drop if not reply to our registration
+	lbne	ip_drop
+	ldb	2,x		; get error code
+	stb	errno,pcr
+	inc	replyf,pcr
+	lbra	ip_drop
+to@	inc	tof,pcr
+	rts
