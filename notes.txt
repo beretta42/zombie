@@ -30,7 +30,7 @@ zombie protocol:
 UDP
 assume one master, and multiple slaves
 slave sits on UDP 6999 listening for commands
-announce a coco booting via message type (0x00), and possible retransmit?
+periodicly announce a coco booting via message type (0x00)
 
 message types:
 
@@ -58,3 +58,19 @@ protocol runs lock-step, and master will retransmit commands if it
 doesn't receive a response in a timely (TBD) fashion.  The slave keeps
 track of the last received XID, and will retransmit it received again.
 This means the master must new XID for each new command.
+
+
+* punching holes:
+
+peer-to-peer clients and servers connect to eachother by both making a
+connection to the central master. The master upon matching the two up, tells each client the other's public ip/port no, upon which the clients redirect the sockets to eachother.
+
+
+
+
+Inserting BASIC lines:
+
+ac7c
+a390
+
+
