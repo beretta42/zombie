@@ -146,3 +146,5 @@ tcp_send	extern
 tcp_close	extern
 tcp_recv	extern
 
+igmp_in         extern
+igmp_test	extern

@@ -47,17 +47,16 @@ eth_init
 	ldb	#14
 	lbra	memcpy
 
-eth_in
-	;; filter for mac or broadcast
+eth_in:	
+	;; filter on Destination address
 	tfr	x,u
-	leay	mac,pcr
+	leay	mac,pcr		; is our MAC ?
 	lbsr	cmp_mac
 	beq	cont@
-	leay	bmac,pcr
-	lbsr	cmp_mac
-	beq	cont@
-	lbra	ip_drop
-	;; drop
+	lda	,x		; is Broadcast / Multicast MAC?
+	anda	#1
+	bne	cont@
+	lbra	ip_drop	       ; none of above, drop it.
 cont@	;; todo: find a raw eth connection here
 	;; distribute to upper layers
 	ldd	12,x

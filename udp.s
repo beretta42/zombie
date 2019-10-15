@@ -56,6 +56,10 @@ udp_out:
 	clr	7,x		;
 	leay	,x		; copy source and dest ports
 	ldu	conn,pcr
+	ldd	C_DIP,u
+	std	dipaddr,pcr
+	ldd	C_DIP+2,u
+	std	dipaddr+2,pcr
 	ldd	C_SPORT,u	; check for zero port
 	bne	s@
 	lbsr	ephem		; go get ephemeral port

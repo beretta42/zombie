@@ -86,6 +86,10 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	dhcp_init
 	lbcs	error
 	lbsr	print
+	;; debug: send a igmp
+	lbsr	igmp_test
+	lbsr	igmp_test
+	bra	a@
 	;; lookup server
 	leax	server,pcr
 	lbsr	resolve

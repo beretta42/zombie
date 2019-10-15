@@ -106,19 +106,23 @@ ip_in:
 	lbne	ip_drop
 	;; check dest ip address if not any address (0,0,0,0)
 	;; then only accept packets with our IP
-	ldd	ipaddr,pcr
+	ldd	ipaddr,pcr	; is ANY ?
 	bne	a@
 	ldd	ipaddr+2,pcr
 	bne	a@
 	bra	cont@
-a@	leau	16,x
+a@	leau	16,x		; is Our IP?
 	leay	ipaddr,pcr
 	lbsr	ip_cmp
 	beq	cont@
-	leay	ipbroad,pcr
+	leay	ipbroad,pcr	; is Broadcast ?
 	lbsr	ip_cmp
 	beq	cont@
-	lbra	ip_drop
+	lda	,u		; is Multicast ?
+	anda	#$f0
+	cmpa	#$e0
+	beq	cont@
+b@	lbra	ip_drop
 	;; packet looks good
 cont@	ldd	12,x		; save source ip for use later
 	std	ripaddr,pcr
@@ -143,6 +147,8 @@ cont@	ldd	12,x		; save source ip for use later
 	lbeq	icmp_in		; go answer ping
 	cmpa	#6		; is tcp?
 	lbeq	tcp_in		; go process tcp
+	cmpa	#2		; is igmp?
+	lbeq    igmp_in		; go answer queries
 	lbra	ip_drop
 
 
@@ -160,7 +166,7 @@ ip_out:
 	std	4,x
 	std	6,x
 	std	10,x
-	lda	#$40
+	lda	#$ff		; TTL of 255 fixme: make dynamic
 	ldb	proto,pcr
 	std	8,x
 	;; fill in src/dst ip
@@ -168,12 +174,9 @@ ip_out:
 	std	12,x
 	ldd	ipaddr+2,pcr
 	std	14,x
-	ldy	conn,pcr
-	ldd	C_DIP,y
-	std	dipaddr,pcr
+	ldd	dipaddr,pcr
 	std	16,x
-	ldd	C_DIP+2,y
-	std	dipaddr+2,pcr
+	ldd	dipaddr+2,pcr
 	std	18,x
 	;; calc cksum
 	ldy	#20
@@ -196,6 +199,7 @@ ip_cksum:
 	exg	d,y
 a@	addd	,x++
 	adcb	#0
+	adca	#0
 	leay	-1,y
 	bne	a@
 	puls	cc

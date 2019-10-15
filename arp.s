@@ -6,14 +6,14 @@
 	export	memclr
 	export  arp_resolve
 	export  arp_setbroad
-	
+
 ;;;  ARP local database
 ;;;    todo: timestamp needed?
-;;; 0   1b - used marker, 0 = unused 
+;;; 0   1b - used marker, 0 = unused
 ;;; 1   6b - mac address field
 ;;; 7   4b - ip address field
-;;; 11b   - size of record 
-	
+;;; 11b   - size of record
+
 	.area	.data
 ARPMAX	equ	8
 	;; add some predefined entries for broadcasts
@@ -30,9 +30,9 @@ mirror	.db	1
 	.db	255,255,255,255
 	.db	1
 	.dw	$ffff,$ffff,$ffff
-broad	.db	192,168,42,255 	; todo: set arp table for local broacast
+broad	.db	192,168,42,255	; todo: set arp table for local broacast
 mirrore
-	
+
 
 memcpy
 	lda	,u+
@@ -66,7 +66,7 @@ arp_init:
 	ldb	#11*(ARPMAX-2)
 	lbsr	memclr
 	rts
-	
+
 ;;; processes incoming arp things
 ;;;   X = ptr to layer 3
 arp_in:
@@ -117,11 +117,11 @@ request_in:
 	ldd	#28		; size of arp
 	lbsr	eth_out
 	lbra	ip_drop
-	
+
 reply_in:
 	pshs	x		; save packet ptr
 	leay	14,x		; compare received ip
-	bsr 	lookup		; find match in database
+	bsr	lookup		; find match in database
 	bcc	found@
 	bsr	findnew		; find empty entry
 	bcc	found@
@@ -134,7 +134,7 @@ found@	tfr	x,y
 	ldb	#10		; copy eth and ip addresses
 	lbsr	memcpy		; to new record
 	lbra	ip_drop
-	
+
 
 
 ;;; purge an old record in databse
@@ -145,7 +145,7 @@ purge:
 
 ;;; find an ip address in arp database
 ;;;   takes: y = ptr to ip
-;;;   returns: x = ptr to record 
+;;;   returns: x = ptr to record
 ;;;   returns: C set on error
 lookup:
 	;; start by looking up in database
@@ -162,8 +162,8 @@ next@	leax	11,x
 	coma
 	rts
 found@	clra
-	rts	
-	
+	rts
+
 
 ;;; find an unused entry in arp database
 findnew:
@@ -190,6 +190,11 @@ arp_resolve:
 	ldd	type,pcr
 	cmpd	#$800
 	bne	ok@
+	;; if multicast IP then translate
+	ldb	dipaddr,pcr
+	andb	#$f0
+	cmpb	#$e0
+	beq	multicast
 	;; if not local use gateway mac
 	ldd	dipaddr,pcr
 	anda	ipmask,pcr
@@ -200,7 +205,7 @@ arp_resolve:
 	anda	ipmask+2,pcr
 	andb	ipmask+3,pcr
 	cmpd	ipnet+2,pcr
-	bne	use_gateway	
+	bne	use_gateway
 	;; find in table
 	leay	dipaddr,pcr
 	lbsr	lookup
@@ -224,6 +229,14 @@ use_gateway
 c@	leau	gateway,pcr
 	lbsr	arp_send
 	bra	out@
+multicast:
+	ldd	#$0100
+	std	dmac,pcr
+	ldd	#$5e00
+	std	dmac+2,pcr
+	ldd	#$00fb
+	std	dmac+4,pcr
+	bra	ok@
 
 
 ;;; send an arp
