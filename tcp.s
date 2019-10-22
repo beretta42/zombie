@@ -1,7 +1,7 @@
 	include "zombie.def"
 
 	.area .data
-flag	rmb    1
+flag	rmb    1		; user signal: 0 wait, 1 - closed, 2 - reset
 retry	rmb    1
 hptr	rmb    2
 eport	rmb    2		; next ephemeral port no.
@@ -68,7 +68,6 @@ out@	puls	x		; restore conn ptr
 	puls	x,pc
 
 
-	
 ;; callback for established state
         export	cb_estab
 cb_estab
@@ -76,11 +75,6 @@ cb_estab
 	ldy	conn,pcr
 	cmpb	#C_CALLTO
 	lbeq	to@
-	;; check for reset here
-	ldb     13,x
-	bitb	#4
-	beq	e@
-	;; fixme: do something clever on reset here
 	;; check seq number if doesn't match ours
 	;; then drop it and ack for where we're at.
 e@	ldd	4,x   	    ; check msb of seq
@@ -91,6 +85,8 @@ e@	ldd	4,x   	    ; check msb of seq
 	lbne	tcp_ack
 	;; check ack: if this packet acklowedges our
 	;; queued send buffer then release it.
+	ldd	C_SNDZ,y	; buffer empty?
+	beq	d@
 	ldd     8,x
 	cmpd	C_SNDN,y
 	bne	d@
@@ -102,33 +98,49 @@ e@	ldd	4,x   	    ; check msb of seq
 	clr	C_SNDZ,y
 	clr	C_SNDZ+1,y
 	;; if the receive buffer is free
-	;; then store store this buffer
-d@	ldd	pdulen,pcr
+	;; then store this buffer
+d@	ldd	#$0001		; push ack / release buffer flags
+	pshs	d
+	ldd	pdulen,pcr	; if no data bytes...skip
 	beq	b@
-	ldd	C_RCVZ,y
-	lbne	tcp_ack
+	ldd	C_RCVZ,y	; if user buffer full.. skip
+	bne	b@
 	ldd	pdu,pcr
+	pshs	d,x
+	leax	pdu,pcr
+	tfr	x,d
+	lbsr	$bdcc
+	lda	#13
+	jsr	$a282
+	puls	d,x
 	std	C_RCVD,y
 	ldd	pdulen,pcr
 	std	C_RCVZ,y
-	ldd	inbuf,pcr
+	ldd	inbuf,pcr	; save frame buffer for releasing later
 	stx	C_RCVB,y
-	;; adjust for next
-c@	ldd	C_RCVZ,y
+	;; adjust expected sequence no for next
+	ldd	C_RCVZ,y
 	addd	C_RCVN+2,y
 	std	C_RCVN+2,y
 	ldd	C_RCVN,y
 	adcb	#0
 	adca	#0
 	std	C_RCVN,y
-	;; if final send ack
+	inc	,s		; set send ack flag
+	clr	1,s		; don't release buffer
+	;; is this a FIN packet?
 b@	ldx     hptr,pcr
 	ldb	13,x
 	bitb	#1
 	beq	a@
-	;; fin packet counts as one sequence byte
 	ldy     conn,pcr
-	clr	C_TFLG2,y
+	inc	,s		; set send ack flag
+	;; remember remote has closed
+	ldb	#1
+	stb	C_TFLG2,y
+	;; signal userspace not to wait
+	inc	flag,pcr
+	;; FIN bit counts as a sequence byte, so adjust answer by 1
 	ldd	C_RCVN+2,y
 	addd	#1
 	std	C_RCVN+2,y
@@ -136,8 +148,13 @@ b@	ldx     hptr,pcr
 	adcb	#0
 	adca	#0
 	std	C_RCVN,y
-a@	lbsr	tcp_ack
-	rts
+a@      tst	,s+		; send ack if needed
+	beq	g@
+	lbsr	tcp_ack
+g@	tst	,s+		; release buffer if needed
+	beq	out@
+	lbra	ip_drop
+out@	rts
 	;; timeout received for this socket
 	;; if send buffer is full then resend it
 	;; if not then just reset timer
@@ -156,16 +173,7 @@ cb_ssent
 	beq	to@
 	ldx	hptr,pcr
 	ldy	conn,pcr
-	;; if a reset then flag closed, stop this callback,
-	ldb	13,x
-	bitb	#$4
-	beq	a@
-	inc	flag,pcr
-	inc	flag,pcr
-	ldd	#0
-	std	C_CALL,y
-	rts
-a@	ldd	6,x
+	ldd	6,x
 	addd	#1		; add 1 to ack no for syn
 	std	C_RCVN+2,y
 	ldd	4,x
@@ -176,7 +184,7 @@ a@	ldd	6,x
 	ldy	conn,pcr
 	ldd	#cb_estab	; go to established state NOT PIC
 	std	C_CALL,y
-	inc	flag
+	inc	flag,pcr	; signal connected
 	rts
 to@	dec	retry,pcr
 	beq	out1@
@@ -185,7 +193,7 @@ to@	dec	retry,pcr
 	ldd	#60
 	std	C_TIME,x
 	rts
-out1@	inc	flag,pcr
+out1@	inc	flag,pcr	; signal closed to userspace
 	inc	flag,pcr
 	rts
 	
@@ -226,6 +234,10 @@ tcp_syn
 	std	,x++		; urg ptr
 	ldb	#6
 	stb	proto,pcr
+	ldd	C_DIP,y
+	std	dipaddr,pcr
+	ldd	C_DIP+2,y
+	std	dipaddr+2,pcr
 	tfr	x,d
 	subd	,s
 	puls	x
@@ -266,6 +278,10 @@ a@	lbsr	getbuff
 	std	,x++		; urg ptr
 	ldb	#6
 	stb	proto,pcr
+	ldd	C_DIP,y
+	std	dipaddr,pcr
+	ldd	C_DIP+2,y
+	std	dipaddr+2,pcr
 	tfr	x,d
 	subd	,s
 	puls	x
@@ -283,36 +299,40 @@ tcp_close
 	;; send FIN
 	ldb	#1		; set fin bit on empty packet
 	stb	C_TFLG,y
-	stb	C_TFLG2,y
 	ldx	#0
 	ldd	#0
 	lbsr	tcp_send
 	;; wait for ack
+	clr	flag,pcr
 	ldy	conn,pcr
-a@	ldd	C_SNDZ,y
-	bne	a@
-	;; clear fin bit
-	ldy	conn,pcr	; fin done
-	clr	C_TFLG,y
-	;; and then wait for remote's fin
-	ldy	conn,pcr
-b@	tst	C_TFLG2,y
-	bne	b@
-	clr	,y
+a@	tst	flag,pcr
+	beq	a@
+	;; reset callback + timeout
+	ldd	#0
+	std	C_CALL,y
 	rts
 
 ;;; received data
 ;;;  takes: D - lenth of buffer, X - buffer ptr
 ;;;  returns: D - lenth of data
+;;;  returns: C set on error
         export  tcp_recv
 tcp_recv
 	pshs	d,x,y,u
 	ldy	conn,pcr
+	tst	C_TFLG2,y	; remote closed?
+	bne	closed@
+	clr	flag,pcr	; reset wait flag
 	;; wait till there's data
 a@	ldd	C_RCVZ,y
+	bne	c@
+	ldb	flag,pcr
 	beq	a@
+	;; close or reset
+	cmpb	#1
+	bra	d@
 	;; copy data to application
-	std	,s
+c@	std	,s
 	ldu	C_RCVD,y
 	tfr	d,y
 b@	lda	,u+
@@ -326,8 +346,11 @@ b@	lda	,u+
 	lbsr	freebuff
 	clr	C_RCVZ,y
 	clr	C_RCVZ+1,y
+	clra
+d@	puls	d,x,y,u,pc
+closed@	clr	,s
+	clr	1,s
 	puls	d,x,y,u,pc
-	
 
 
 ;;; send data
@@ -416,6 +439,10 @@ tcp_tx
 	leax	39,x
 	ldb	#6
 	stb	proto,pcr
+	ldd	C_DIP,y
+	std	dipaddr,pcr
+	ldd	C_DIP+2,y
+	std	dipaddr+2,pcr
 	ldd	C_RCVN,y
 	std	8,x
 	ldd	C_RCVN+2,y
@@ -457,7 +484,7 @@ tcp_cksum
 tcp_in	
 	lbsr	for_sock
 a@	lbsr	next_sock
-	lbcs	ip_drop
+	lbcs	ip_drop		; fixme: send reset here
 	ldy	conn,pcr
 	ldb	C_FLG,y		; is a TCP socket?
 	cmpb	#C_TCP
@@ -481,12 +508,23 @@ a@	lbsr	next_sock
 	negb			; subtract length from ip's length
 	leay	b,y		; 
 	sty	pdulen,pcr	; save the length of the tcp segment
+	;; check for tcp reset
+	ldb	13,x
+	bitb	#4
+	bne	tcp_reset
 	;; call the callback
 	ldx	conn,pcr
 	ldx	C_CALL,x
 	lbeq	ip_drop
 	ldb	#C_CALLRX
-	jsr	,x
+	jmp	,x
+
+tcp_reset:
+	ldx	conn,pcr	; get connection ptr
+	ldb	#3
+	stb	flag,pcr	; set reset flag to userspace
+	ldd	#0
+	std	C_CALL,x
 	lbra	ip_drop
 	
 

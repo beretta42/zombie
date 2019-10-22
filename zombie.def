@@ -128,8 +128,8 @@ C_SNDZ		rmb	2	; size of data in send buffer
 C_RCVB		rmb	2	; receive packet buffer
 C_RCVD		rmb	2	; ptr to data in buffer
 C_RCVZ		rmb	2	; size of received packet
-C_TFLG		rmb	1	; flags
-C_TFLG2		rmb	1	; more flag
+C_TFLG		rmb	1	; out going TCP flags mirror
+C_TFLG2		rmb	1	; remote has closed
 C_SIZE		equ	*	; size of this struct
 	
 C_UDP		equ	1

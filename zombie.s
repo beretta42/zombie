@@ -32,6 +32,8 @@ errno	rmb	1		; returned error code from rnp
 replyf  rmb	1		; flipped when irq receives a reply
 tof     rmb     1		; flipped when timed out
 rnpaddr rmb	2		; rnp address
+
+rx	rmb	80		; debug: a tcp rx buffer
 	
 	.area	.code
 
@@ -77,6 +79,10 @@ start	orcc	#$50		; turn off interrupts
 	stx	$10d
 	lbsr	ip6809_init	; initialize system
 	lbsr	dev_init	; init device
+	ldx	#$3900
+	lbsr	freebuff
+	ldx	#$3c00
+	lbsr	freebuff
 	ldx	#$3f00
 	lbsr	freebuff
 	ldx	#$4200		; add a buffers to freelist
@@ -86,10 +92,41 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	dhcp_init
 	lbcs	error
 	lbsr	print
-	;; debug: send a igmp
 	lbsr	igmp_test
 	lbsr	igmp_test
-	bra	a@
+	;; debug tcp
+	ldb	#C_TCP		; make tcp socket
+	lbsr	socket
+	ldx	conn,pcr
+	ldd	#0		; ephemeral source port
+	std	C_SPORT,x
+	ldd	#4242
+	std	C_DPORT,x	; destination port: TELNET
+	ldd	#$c0a8
+	std	C_DIP,x
+	ldd	#$2a01
+	std	C_DIP+2,x
+	lbsr	tcp_connect
+x@
+	clr	,-s
+w@	leax	msg@,pcr
+	ldd	#14
+	lbsr	tcp_send
+	dec	,s
+	bne	w@
+	leas	1,s
+t@	ldx	#$400
+	ldd	#$200
+	lbsr	tcp_recv
+	cmpd	#0
+	beq	y@
+	bra	t@
+y@	inc	$5ff
+	lbsr	tcp_close
+	bra	a@		; fixme: skip zombie startup
+msg@	fcc	"Hello World!"
+	.db	13,10
+	;; start zombie
 	;; lookup server
 	leax	server,pcr
 	lbsr	resolve
