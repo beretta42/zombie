@@ -7,6 +7,33 @@ hptr	rmb    2
 eport	rmb    2		; next ephemeral port no.
 	.area .code
 
+
+;;; passive open
+;;;   for now, only one open
+;;;   takes: conn = socket
+	export tcp_listen
+tcp_listen
+	ldx	conn,pcr
+	;; set source port to zero
+	clr	C_DPORT,x
+	clr	C_DPORT+1,x
+	;; set new sequence to a random number
+	lbsr	lfsr
+	ldd	rand,pcr
+	std	C_SNDN,x
+	lbsr	lfsr
+	ldd	rand,pcr
+	std	C_SNDN+2,x
+	;; reset sync flag
+	clr	flag,pcr
+	;; set timeout, callback, retries
+	leay	listen_cb,pcr
+	sty	C_CALL,x
+	;; spin until released
+a@	tst	flag,pcr
+	beq	a@
+	rts
+
 ;;; active open
 ;;;   takes: conn = socket
     	export tcp_connect
@@ -24,7 +51,8 @@ b@	;; if our local port is 0 then pick an ephemeral port
 	bne	c@
 	lbsr	ephem
 	;; set new sequence to a random number
-c@	ldd	rand,pcr	
+c@	lbsr	lfsr
+	ldd	rand,pcr
 	std	C_SNDN,x
 	lbsr	lfsr
 	ldd	rand,pcr
@@ -38,11 +66,54 @@ c@	ldd	rand,pcr
 	ldb	#3
 	stb	retry,pcr
 	lbsr	tcp_syn
+	;; sit and spin until released
 a@	ldb	flag,pcr
 	beq	a@
 	ldb	#1
 	cmpb	flag,pcr
 	rts
+
+
+;;; call-back for the listen state
+	export listen_cb
+listen_cb
+	ldx	hptr,pcr
+	ldy	conn,pcr
+	cmpb	#C_CALLTO
+	lbeq	to@
+	;; is this a SYN?
+	ldb	13,x
+	bitb	#2
+	beq	out@		; not a SYN
+	;; record ack + 1 for the sync
+	ldd	6,x
+	addd	#1		; add 1 to ack no for syn
+	std	C_RCVN+2,y
+	ldd	4,x
+	adcb	#0		; add carry into MSB
+	adca	#0
+	std	C_RCVN,y
+	;; record dest port
+	ldd	0,x
+	std	C_DPORT,y
+	;; record dest ip
+	ldd	ripaddr,pcr
+	std	C_DIP,y
+	ldd	ripaddr+2,pcr
+	std	C_DIP+2,y
+	;; set out timeout
+	ldx	conn,pcr
+	ldd	#60
+	std	C_TIME,x
+	leay	cb_ssent,pcr
+	sty	C_CALL,x
+	ldb	#3
+	stb	retry,pcr
+	;; send out initial sync packet (from us)
+	lbsr	tcp_syn
+	rts
+to@
+out@	rts
 
 
 ephem:	pshs	x
@@ -164,7 +235,7 @@ to@	ldd     C_SNDZ,y
 s@	ldd	#60
 	std	C_TIME,y
 	rts
-	
+
 
 ;; callback for active open, sync sent state
 	export	cb_ssent
@@ -489,16 +560,17 @@ a@	lbsr	next_sock
 	ldb	C_FLG,y		; is a TCP socket?
 	cmpb	#C_TCP
 	bne	a@
-	ldd	,x		; is packet's source port our dest port?
-	cmpd	C_DPORT,y
-	bne	a@
 	ldd	2,x		; is packet's dest port our source port?
 	cmpd	C_SPORT,y
+	bne	a@
+	ldd	C_DPORT,y	; is socket listening?
+	beq	go@
+	cmpd	,x              ; is packet's source port our dest port?
 	bne	a@
 	;; fixme: filter for anything else here? (cksum?)
 	;; found our socket
 	;; record pdu / length
-	stx	hptr,pcr	; save the header pointer
+go@	stx	hptr,pcr	; save the header pointer
 	ldb	12,x		; data offset
 	lsrb			; multiply by 4 - header size in bytes
 	lsrb			; (its in top nibble.. so divide by 4 rather)

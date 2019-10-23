@@ -142,6 +142,7 @@ C_CALLRX	equ	1	; rx data
 
 
 tcp_connect	extern
+tcp_listen	extern
 tcp_send	extern
 tcp_close	extern
 tcp_recv	extern
