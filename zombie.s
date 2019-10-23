@@ -98,17 +98,18 @@ start	orcc	#$50		; turn off interrupts
 	ldb	#C_TCP		; make tcp socket
 	lbsr	socket
 	ldx	conn,pcr
-	ldd	#0		; ephemeral source port
+	ldd	#4242		; a silly source port
 	std	C_SPORT,x
-	ldd	#4242
-	std	C_DPORT,x	; destination port: TELNET
-	ldd	#$c0a8
+	ldd	#0
+	std	C_DPORT,x	; match all destination ports
+	ldd	#0		; any destination IP
 	std	C_DIP,x
-	ldd	#$2a01
 	std	C_DIP+2,x
-	lbsr	tcp_connect
+	lbsr	tcp_listen
+*	lbsr	tcp_connect
 x@
-	clr	,-s
+	ldb	#8
+	pshs	b
 w@	leax	msg@,pcr
 	ldd	#14
 	lbsr	tcp_send
@@ -120,12 +121,19 @@ t@	ldx	#$400
 	lbsr	tcp_recv
 	cmpd	#0
 	beq	y@
+	lda	#'Q
+	cmpa	$400
+	beq	me_close@
 	bra	t@
 y@	inc	$5ff
 	lbsr	tcp_close
 	bra	a@		; fixme: skip zombie startup
 msg@	fcc	"Hello World!"
 	.db	13,10
+me_close@
+	lbsr	tcp_close
+	inc	$5fe
+	bra	a@
 	;; start zombie
 	;; lookup server
 	leax	server,pcr
