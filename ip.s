@@ -206,6 +206,7 @@ a@	addd	,x++
 	bcc	b@
 	adda	,x+
 	adcb	#0
+	adca	#0
 b@	coma
 	comb
 	puls	x,pc
