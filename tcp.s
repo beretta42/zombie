@@ -110,10 +110,11 @@ listen_cb
 	ldb	#3
 	stb	retry,pcr
 	;; send out initial sync packet (from us)
+	lbsr	ip_drop
 	lbsr	tcp_syn
 	rts
-to@
-out@	rts
+to@	rts
+out@	lbra	ip_drop
 
 
 ephem:	pshs	x
@@ -148,12 +149,12 @@ cb_estab
 	lbeq	to@
 	;; check seq number if doesn't match ours
 	;; then drop it and ack for where we're at.
-e@	ldd	4,x   	    ; check msb of seq
+	ldd	4,x   	    ; check msb of seq
 	cmpd	C_RCVN,y
-	lbne	tcp_ack
+	lbne	drop_and_ack
 	ldd	6,x	    ; check lsb of seq
 	cmpd	C_RCVN+2,y
-	lbne	tcp_ack
+	lbne	drop_and_ack
 	;; check ack: if this packet acklowedges our
 	;; queued send buffer then release it.
 	ldd	C_SNDZ,y	; buffer empty?
@@ -177,13 +178,6 @@ d@	ldd	#$0001		; push ack / release buffer flags
 	ldd	C_RCVZ,y	; if user buffer full.. skip
 	bne	b@
 	ldd	pdu,pcr
-	pshs	d,x
-	leax	pdu,pcr
-	tfr	x,d
-	lbsr	$bdcc
-	lda	#13
-	jsr	$a282
-	puls	d,x
 	std	C_RCVD,y
 	ldd	pdulen,pcr
 	std	C_RCVZ,y
@@ -235,6 +229,9 @@ to@	ldd     C_SNDZ,y
 s@	ldd	#60
 	std	C_TIME,y
 	rts
+drop_and_ack
+	lbsr	ip_drop
+	lbra	tcp_ack
 
 
 ;; callback for active open, sync sent state
@@ -251,13 +248,15 @@ cb_ssent
 	adcb	#0		; add carry into MSB
 	adca	#0
 	std	C_RCVN,y
+	lbsr	ip_drop
 	lbsr	tcp_ack
 	ldy	conn,pcr
 	ldd	#cb_estab	; go to established state NOT PIC
 	std	C_CALL,y
 	inc	flag,pcr	; signal connected
 	rts
-to@	dec	retry,pcr
+to@	lbsr	ip_drop
+	dec	retry,pcr
 	beq	out1@
 	lbsr	tcp_syn
 	ldx	conn,pcr
@@ -435,8 +434,9 @@ tcp_send
 	ldy	conn,pcr
 b@	ldd	C_SNDZ,y
 	bne	b@
-	;; get a buffer and fill it out
-	lbsr	getbuff
+	;; spin until buffer is free
+d@	lbsr	getbuff
+	bcs	d@
 	pshs	x
 	leax	39,x		; todo: check size
 	pshs	x
@@ -454,8 +454,7 @@ b@	ldd	C_SNDZ,y
 	std	,x++
 	leax	4,x		; reserve room for ack (filled out later)
 	ldd	#$5010		; data offset, ack
-	ldb	C_TFLG,y	; or in additional flags
-	orb	#$10
+	orb	C_TFLG,y	; or in additional flags
 	std	,x++
 	ldd	#$200		; window (may want to send this in tcp_tx)
 	std	,x++
@@ -500,11 +499,13 @@ e@	tfr	x,d
 	subd	,s
 	ldy	conn,pcr
 	std	C_SNDZ,y
-	leas	8,s
-	;; send it 
-	lbra	tcp_tx
+	leas	4,s
+	;; send it
+	lbsr	tcp_tx
+	puls	d,x,pc
 
 tcp_tx
+	pshs	y
 	ldy	conn,pcr
 	ldx	C_SNDB,y
 	leax	39,x
@@ -520,14 +521,16 @@ tcp_tx
 	std	10,x
 	ldd	C_SNDZ,y
 	lbsr	tcp_cksum
-	lbra	ip_out
-
+	lbsr	ip_out
+	puls	y,pc
 
 ;; todo: precalculate the relatively static
 ;; calc pseudo-header
 ;;   takes: X
 tcp_cksum
-	pshs	d,x
+	pshs	d,x,y
+	clr	16,x		; clear out old cksum
+	clr	17,x
 	ldd	ipaddr,pcr
 	addd	ipaddr+2,pcr
 	adcb	#0
@@ -547,8 +550,7 @@ tcp_cksum
 	ldy	,s
 	lbsr	ip_cksum
 	std	16,x
-	puls	d,x,pc
-
+a@	puls	d,x,y,pc
 
 	
 	export	tcp_in
