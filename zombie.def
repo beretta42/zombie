@@ -4,7 +4,7 @@
 
 dev_send	extern
 dev_poll	extern
-dev_init	extern	
+dev_init	extern
 
 arp_setbroad	extern
 arp_init	extern
@@ -73,7 +73,7 @@ rand		extern
 lfsr		extern
 
 ; drop the current input buffer
-ip_drop	   	extern
+ip_drop		extern
 
 ; frees a buffer
 ;   takes: X = ptr
@@ -81,7 +81,7 @@ freebuff	extern
 
 ; allocates a buffer
 ;   returns: X = ptr, C set on error
-getbuff	        extern
+getbuff		extern
 
 ; initialize the system
 ip6809_init	extern
@@ -97,26 +97,26 @@ conn		extern
 
 ; send data to socket
 ;   takes: conn = socket, X = ptr to pdu, D = length
-send	   	extern
+send		extern
 
 
 ; closes a socket
-close	        extern
+close		extern
 
 
 ; call once per tick
-tick   	    	extern
+tick		extern
 
 ;;; print a ip address/mask
 ;;;    takes X - ip addr ptr
-ipprint	        extern
+ipprint		extern
 
 ;  This structure represents a logical connection
 ;  'conn' points to one of these
 	.area	.conn,constant
 C_FLG		rmb	1	; flags/type
 C_DIP		rmb	4	; dest ip address
-C_SPORT 	rmb	2	; src port
+C_SPORT		rmb	2	; src port
 C_DPORT		rmb	2	; dest sport
 C_CALL		rmb	2	; callback vector
 C_TIME		rmb	2	; timer
@@ -131,7 +131,7 @@ C_RCVZ		rmb	2	; size of received packet
 C_TFLG		rmb	1	; out going TCP flags mirror
 C_TFLG2		rmb	1	; remote has closed
 C_SIZE		equ	*	; size of this struct
-	
+
 C_UDP		equ	1
 C_TCP		equ	2
 
@@ -149,3 +149,6 @@ tcp_recv	extern
 
 igmp_in         extern
 igmp_test	extern
+
+
+mdns_init	extern
