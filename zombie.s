@@ -94,6 +94,8 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	print
 	lbsr	igmp_test
 	lbsr	igmp_test
+	;; mdns
+	lbsr	mdns_init
 	;; debug tcp
 	ldb	#C_TCP		; make tcp socket
 	lbsr	socket
