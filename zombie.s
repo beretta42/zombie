@@ -40,7 +40,7 @@ rx	rmb	80		; debug: a tcp rx buffer
 server	fcn	"play-classics.net"
 uname	fcn	"beretta/zombie"
 pass    fcn     "notapassword"
-
+ibroad	.db	255,255,255,255
 
 irq_handle
 	lda	$ff02		; clear pia
@@ -89,6 +89,7 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	freebuff	;
 	andcc	#~$10		; turn on irq interrupt
 	;; dhcp
+	leax	ibroad,pcr
 	lbsr	dhcp_init
 	lbcs	error
 	lbsr	print
@@ -166,6 +167,7 @@ b@	ldb	#C_UDP
 	;; go back to BASIC
 a@	rts
 error	inc	$501
+	lbsr	print
 	bra	a@
 
 ;; callback for received datagrams

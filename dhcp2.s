@@ -13,8 +13,12 @@ flag	rmb	1		; break flag
 
 	.area	.code
 
-
+	;; try to obtain an IP from dhcp
+	;;  takes - X ptr to broadcast address (e.i. 255.255.255.255)
+	;;  returns C - set on error
+	;;  modifies - everything
 dhcp_init:
+	pshs	x		; save broadcast for later
 	;; set ip address to 0.0.0.0
 	leay	ipaddr,pcr
 	ldb	#4
@@ -23,9 +27,11 @@ dhcp_init:
 	ldb	#C_UDP
 	lbsr	socket
 	;; set dest ip address to broadcast
+	puls	y
 	ldx	conn,pcr
-	ldd	#$ffff
+	ldd	,y
 	std	C_DIP,x
+	ldd	2,y
 	std	C_DIP+2,x
 	;; set port numbers
 	ldd	#68
@@ -247,15 +253,15 @@ cb_offer
 	ldx	conn,pcr
 	clr	C_TIME,x
 	clr	C_TIME+1,x
-	bra	ok@
+	lbra	ip_drop		; release buffer and exit
 	;; a timeout has happend
 to@	dec	retry,pcr
 	beq	fail@           ; no failing on out-of-retries yet
 	jsr	[vect,pcr]        ; send BOOTREQUEST packet again
-	ldd	#4*60		; reset timer
+	ldd	#4*60		; reset timer fixme: this should backoff
 	ldx	conn,pcr
 	std	C_TIME,x
-	bra	ok@
+	rts
 fail@	inc	flag,pcr
 	inc	flag,pcr
-ok@	lbra	ip_drop
+	rts
