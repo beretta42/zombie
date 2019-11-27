@@ -255,8 +255,7 @@ cb_ssent
 	std	C_CALL,y
 	inc	flag,pcr	; signal connected
 	rts
-to@	lbsr	ip_drop
-	dec	retry,pcr
+to@	dec	retry,pcr
 	beq	out1@
 	lbsr	tcp_syn
 	ldx	conn,pcr
