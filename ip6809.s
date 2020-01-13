@@ -30,12 +30,14 @@ rand	rmb	2		; random number
         export 	freebuff
 freebuff
 	pshs	cc,u
+	cmpx	#0
+	beq	out@
 	orcc	#$10
 	ldu	fptr,pcr
 	stx	,--u
 	stu	fptr,pcr
 	inc	fno,pcr
-	puls	cc,u,pc
+out@	puls	cc,u,pc
 
 
 ;;; get a packet buffer from freelist
