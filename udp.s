@@ -5,10 +5,12 @@
 	export udp_out
 	export pdu
 	export pdulen
+	export pduport
 
 	.area .data
 pdu	rmb	2		; pdu address of received packet
 pdulen	rmb	2		; pdu length of received packet
+pduport	rmb	2		; source port of received packet
 eport	rmb	2		; next ephemeral port number
 	
 	.area .code
@@ -37,6 +39,8 @@ a@	lbsr	next_sock
 	ldy	rlen,pcr
 	leay	-8,y
 	sty	pdulen,pcr
+	ldd	,x
+	std	pduport,pcr
 	;; call the callback (if set)
 	ldx	conn,pcr
 	ldx	C_CALL,x
