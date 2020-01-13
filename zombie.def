@@ -47,6 +47,7 @@ sport		extern
 dport		extern
 pdu		extern
 pdulen		extern
+pduport		extern
 
 tcp_in		extern
 tcp_init	extern
@@ -58,6 +59,8 @@ inbuf		extern
 inmax		extern
 
 dhcp_init	extern
+bootfile	extern
+oserver		extern
 
 time		extern
 pause		extern

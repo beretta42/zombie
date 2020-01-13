@@ -1,6 +1,8 @@
 	include "zombie.def"
 
 	export	dhcp_init
+	export  bootfile
+	export  oserver
 
 	.area	.data
 oipaddr	rmb	4		; offered IP address
@@ -10,6 +12,7 @@ itype	rmb	1		; incoming dhcp message type
 etype	rmb	1		; expected incoming dhcp type
 retry	rmb	1               ; retry counter
 flag	rmb	1		; break flag
+bootfile  rmb	64		; filename
 
 	.area	.code
 
@@ -19,6 +22,7 @@ flag	rmb	1		; break flag
 	;;  modifies - everything
 dhcp_init:
 	pshs	x		; save broadcast for later
+	clr	bootfile,pcr	; clear bootfile string
 	;; set ip address to 0.0.0.0
 	leay	ipaddr,pcr
 	ldb	#4
@@ -60,6 +64,15 @@ dhcp_init:
 	std	ipaddr,pcr
 	ldd	oipaddr+2,pcr
 	std	ipaddr+2,pcr
+	;; pull out bootfile name
+	pshs	x,y
+	leay	bootfile,pcr
+	leax	108,x
+a@	ldb	,x+
+	stb	,y+
+	bne	a@
+	puls	x,y
+	;; do options
 	leax	240,x		; skip to options
 f@	ldb	,x+		; get option
 	cmpb	#1		; subnet?
