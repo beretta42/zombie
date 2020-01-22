@@ -53,6 +53,7 @@ tcp_in		extern
 tcp_init	extern
 
 icmp_in		extern
+icmp_out	extern
 
 insize		extern
 inbuf		extern
@@ -137,6 +138,7 @@ C_SIZE		equ	*	; size of this struct
 
 C_UDP		equ	1
 C_TCP		equ	2
+C_ICMP		equ	3
 
 ; these status codes are sent to callback functon
 ; to indicate what's going on...
