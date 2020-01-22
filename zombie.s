@@ -1,9 +1,5 @@
 	include "zombie.def"
 
-	import	lsr1
-	import	lsr2
-	import	encrypt
-	
 	export	start
 	export  insize
 	export  inmax
@@ -23,23 +19,15 @@ inmax	.dw	576+14+5	; max size of input buffer
 
 
 stack	rmb	64		; a private stack
-stacke		
+stacke
 ivect	rmb	2		; saved BASIC's irq vector
 sstack  rmb	2		; saved entry stack frame
 time	rmb	2		; a ticker
 atime	rmb	2		; announce every so often
-errno	rmb	1		; returned error code from rnp
-replyf  rmb	1		; flipped when irq receives a reply
-tof     rmb     1		; flipped when timed out
-rnpaddr rmb	2		; rnp address
 
-rx	rmb	80		; debug: a tcp rx buffer
-	
 	.area	.code
 
-server	fcn	"play-classics.net"
-uname	fcn	"beretta/zombie"
-pass    fcn     "notapassword"
+name	fcn	"BRETT'S COCO"
 ibroad	.db	255,255,255,255
 
 irq_handle
@@ -68,7 +56,7 @@ a@	std	atime,pcr
 	jmp	[ivect]
 	;; no just rti our selfs
 b@	rti
-	
+
 start	orcc	#$50		; turn off interrupts
 	ldd	#0
 	std	time,pcr
@@ -97,70 +85,21 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	igmp_test
 	;; mdns
 	lbsr	mdns_init
-	;; debug tcp
-	ldb	#C_TCP		; make tcp socket
-	lbsr	socket
-	ldx	conn,pcr
-	ldd	#4242		; a silly source port
-	std	C_SPORT,x
-	ldd	#0
-	std	C_DPORT,x	; match all destination ports
-	ldd	#0		; any destination IP
-	std	C_DIP,x
-	std	C_DIP+2,x
-	lbsr	tcp_listen
-*	lbsr	tcp_connect
-x@
-	ldb	#8
-	pshs	b
-w@	leax	msg@,pcr
-	ldd	#14
-	lbsr	tcp_send
-	dec	,s
-	bne	w@
-	leas	1,s
-t@	ldx	#$400
-	ldd	#$200
-	lbsr	tcp_recv
-	cmpd	#0
-	beq	y@
-	lda	#'Q
-	cmpa	$400
-	beq	me_close@
-	bra	t@
-y@	inc	$5ff
-	lbsr	tcp_close
-	bra	a@		; fixme: skip zombie startup
-msg@	fcc	"Hello World!"
-	.db	13,10
-me_close@
-	lbsr	tcp_close
-	inc	$5fe
-	bra	a@
 	;; start zombie
-	;; lookup server
-	leax	server,pcr
-	lbsr	resolve
-	bcc	b@
-	inc	$501
 	;; setup a socket
 b@	ldb	#C_UDP
 	lbsr	socket
 	ldx	conn,pcr
-	ldd	#0		; source port is ephemeral
+	ldd	#7000		; source port is ephemeral
 	std	C_SPORT,x
-	ldd	#6999		; dest port 6999
+	ldd	#7000		; dest port 7000
 	std	C_DPORT,x
-*	ldd	ipbroad,pcr
-	ldd	ans,pcr
+	ldd	ipbroad,pcr
 	std	C_DIP,x		; destination IP
-	ldd	ans+2,pcr
-*	ldd	ipbroad+2,pcr
+	ldd	ipbroad+2,pcr
 	std	C_DIP+2,x
-*	leay	call,pcr	; attach a callback
-*	sty	C_CALL,x
-	;; register with relay server
-	lbsr	register
+	leay	call,pcr	; attach a callback
+	sty	C_CALL,x
 	;; initialize the timer
 	ldd	#ANN_TO
 	std	atime,pcr
@@ -173,14 +112,8 @@ error	inc	$501
 ;; callback for received datagrams
 ;; just print the udp's data as a string
 call
-	ldx	pdu,pcr		; check version / opcode
-	ldd	,x		; get version / opcode
-	cmpd	#$0105		; is correct?
-	lbne	ip_drop		; no then drop
-	ldd	10,x		; check protocol
-	cmpd	#1		; fixme: need some standard protocol nos here
-	lbne	ip_drop
-	ldb	12,x
+	ldx	pdu,pcr
+	ldb	,x
 	cmpb	#1	; is read ?
 	beq	cmd_read
 	cmpb	#2	; is write?
@@ -192,9 +125,9 @@ call
 	export	cmd_read
 cmd_read
 	bsr	cmd_reply
-	ldy	5,x
-	ldu	3,x
-	leax	7,x
+	ldy	6,x
+	ldu	4,x
+	leax	8,x
 a@	ldb	,u+
 	stb	,x+
 	leay	-1,y
@@ -204,19 +137,19 @@ a@	ldb	,u+
 	ldx	pdu,pcr
 	lbsr	udp_out
 	lbra	ip_drop
-	
+
 cmd_write
 	bsr	cmd_reply
-	ldy	5,x
+	ldy	6,x
 	cmpy	#0		; fixme what to do if zero?
 	beq	c@
-b@	ldu	3,x
-	leax	7,x
+b@	ldu	4,x
+	leax	8,x
 a@	ldb	,x+
 	stb	,u+
 	leay	-1,y
 	bne	a@
-c@	ldd	#15		; rnp header + 3 bytes of zombie header
+c@	ldd	#4
 	ldx	pdu,pcr
 	lbsr	udp_out
 	lbra	ip_drop
@@ -224,10 +157,10 @@ c@	ldd	#15		; rnp header + 3 bytes of zombie header
 
 cmd_exec
 	bsr	cmd_reply
-	ldx	3,x
+	ldx	4,x
 	pshs	x
-	ldd	pdulen,pcr
 	ldx	pdu,pcr
+	ldd	pdulen,pcr
 	lbsr	udp_out
 	lbsr	ip_drop
 	puls	x
@@ -237,17 +170,16 @@ cmd_exec
 	clr	ivect+1,pcr
 	rts
 
+	;; mark packet as reply
 cmd_reply
-	;; mark as rnp reply
-	ldb	1,x
+	ldy	conn,pcr
+	ldd	ripaddr,pcr
+	std	C_DIP,y
+	ldd	ripaddr+2,pcr
+	std	C_DIP+2,y
+	ldb	,x
 	orb	#$80
-	stb	1,x
-	;; flip source / dest address
-	ldd	8,x		; get source rnp address
-	std	6,x		; set dest rnp address
-	ldd	rnpaddr,pcr	; get our address
-	std	8,x		; set source address
-	leax	12,x		; goto beginning of rnp route data
+	stb	,x
 	rts
 
 announce
@@ -255,15 +187,21 @@ announce
 	bcs	out@
 	pshs	x
 	leax	47,x		; pad for lower layers (DW+ETH+IP+UDP)
-	ldd	#0x0106		; version, ping opcode
-	std	,x
-	ldd	#2
+	pshs	x
+	clr	,x+		; announce opcode
+	leay	name,pcr
+a@	lda	,y+
+	sta	,x+
+	bne	a@
+	tfr	x,d
+	subd	,s
+	puls	x
 	lbsr	udp_out
 	puls	x
 	lbsr	freebuff
 out@	rts
 
-	
+
 cr	pshs	a
 	lda	#$d
 	jsr	$a282
@@ -308,91 +246,3 @@ c@	fcn	"BROADCAST "
 d@	fcn	"NETADDR   "
 e@	fcn	"GATEWAY   "
 f@	fcn	"DNS       "
-
-
-
-register
-	;;  register our callback
-	ldx	conn,pcr
-	leay	reg_cb,pcr
-	sty	C_CALL,x
-	;;  build a buffer
-e@	lbsr	getbuff		; X = new buffer
-	lbcs	out@		; error
-	pshs	x		; ( buf )
-	leax	47,x		; dw + eth + ip + udp
-	pshs	x		; ( buf udp )
-	ldd	#0x0101		; version, register opcode
-	std	,x
-	leax	12,x		; jump to start of registration data
-	clr	,x+		; zero attribute and encryption type
-	clr	,x		;
-	inc	,x+
-	pshs	x		; ( buf udp pass )
-	leay	pass,pcr	; copy password to buff
-a@	lda	,y+
-	sta	,x+
-	bne	a@
-	ldx	,s		; ( buf udp pass )
-	leax	32,x		; copy username/node to buff
-	leay	uname,pcr
-b@	lda	,y+
-	sta	,x+
-	bne	b@
-	;; encrypt
-	ldd	#$aa5b
-	std	lsr1,pcr
-	ldd	#$33c3
-	std	lsr1+2,pcr
-	ldd	#$534e
-	std	lsr2,pcr
-	ldd	#$2210
-	std	lsr2+2,pcr
-	puls	x		; ( buf udp )
-	ldy	#64
-	lbsr	encrypt
-	ldd	#12+2+64
-	pshs	d
-*	tfr	x,d
-*	subd	,s
-*	pshs	d		; ( buf udp size )
-	;; send buffer
-c@	ldx	conn,pcr	; set timer
-	ldd	#60
-	std	C_TIME,x
-	clr	replyf,pcr	; clear flags
-	clr	tof,pcr
-	ldd	,s		; sendit
-	ldx	2,s
-	lbsr	udp_out
-	;; wait for reply
-d@	tst	tof,pcr
-	bne	c@		; timeout? send again
-	tst	replyf,pcr
-	beq	d@		; no reply? test again
-	;; test result
-	ldb	errno,pcr
-	bne	c@		; error? send again fixme: end this sometime
-	;; connected
-	leas	4,s		; ( buf )
-	puls	x		; ( )
-	lbsr	freebuff
-	ldx	conn,pcr
-	leay	call,pcr
-	sty	C_CALL,x	; set call timer to normal call back
-	clr	C_TIME,x	; clear timer (we'll use our own)
-	clr	C_TIME+1,x	; fixme: should I use my own?
-out@	rts
-reg_cb
-	cmpb	#C_CALLTO
-	beq	to@
-	ldx	pdu,pcr
-	ldd	,x		; drop if not our version
-	cmpd	#$0181		; drop if not reply to our registration
-	lbne	ip_drop
-	ldb	2,x		; get error code
-	stb	errno,pcr
-	inc	replyf,pcr
-	lbra	ip_drop
-to@	inc	tof,pcr
-	rts

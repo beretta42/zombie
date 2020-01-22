@@ -45,6 +45,7 @@ struct db_entry {
 #define DF_EMPTY 0
 #define DF_IFFY  1
 #define DF_USED  2
+#define DF_MANUAL 3
 
 
 #define MT_ANN   0
@@ -52,13 +53,14 @@ struct db_entry {
 #define MT_WRITE 2
 #define MT_EXEC  3
 #define MT_MASK  0x0f
-#define MF_RESP  0x80
+#define MT_RESP  0x80
 
 #define DBNUM    16
 
 struct db_entry db[DBNUM];
 
 int conn = -1;
+char *defname = "MANUAL";
 
 #define ARGBYTE(address) dasmb(address)
 #define ARGWORD(address) dasmw(address)
@@ -80,7 +82,7 @@ uint16_t dasmw(uint16_t add)
 
 
 /* Add a client to the database */
-void db_add(struct sockaddr_in *addr)
+int db_add(struct sockaddr_in *addr)
 {
     int x;
     /* don't add if already in database */
@@ -94,14 +96,14 @@ void db_add(struct sockaddr_in *addr)
 	if (db[x].flag == DF_EMPTY){
 	    memcpy(&db[x].addr, addr, sizeof(struct sockaddr_in));
 	    db[x].cap = 0;
-	    strncpy(db[x].name, buf + 8, 16);
-	    db[x].name[15]=0;
 	    goto out;
 	}
     }
   out:
+    strncpy(db[x].name, buf + 1, 16);
     db[x].time = time(NULL) + PTIME;
     db[x].flag = DF_USED;
+    return x;
 }
 
 
@@ -126,20 +128,55 @@ void do_connect(void)
 {
     int x;
     char *p;
+    int i = 0;
+    uint32_t ip = 0;
+    uint16_t port = 7000;
+    struct sockaddr_in a;
 
     p = strtok(NULL,WS);
     if (!p) {
-	fprintf(stderr,"error: number expected\n");
+	fprintf(stderr,"error: number/ip expected\n");
 	return;
     }
-    x = strtol(p,NULL,10);
-    if (x < 0 || x >= DBNUM ){
-	fprintf(stderr,"error: connection number out of range.\n");
-	return;
+    if (index(p, '.') == NULL) {
+	x = strtol(p,NULL,10);
+	if (x < 0 || x >= DBNUM ){
+	    fprintf(stderr,"error: connection number out of range.\n");
+	    return;
+	}
+	if (db[x].flag != DF_USED && db[x].flag != DF_MANUAL){
+	    fprintf(stderr,"error: no such machine.\n");
+	    return;
+	}
     }
-    if (db[x].flag != DF_USED){
-	fprintf(stderr,"error: no such machine.\n");
-	return;
+    else { /* it must be an ip */
+	while(*p) {
+	    if (*p == '.') {
+		ip = (ip << 8) + i;
+		i = 0;
+		goto cont;
+	    }
+	    if (*p == ':') {
+		p++;
+		port = strtol(p,NULL,10);
+		break;;
+	    }
+	    if (*p < '0' || *p > '9') {
+		fprintf(stderr,"error: bad connection no/ip\n");
+		return;
+	    }
+	    /* accumulate */
+	    i = i * 10 + *p - 0x30;
+	cont:
+	    p++;
+	}
+	ip = (ip << 8) + i;
+	a.sin_family = AF_INET;
+	a.sin_port = htons(port);
+	a.sin_addr.s_addr = htonl(ip);
+	strncpy(buf+ 1, defname, 16);
+	x = db_add(&a);
+	db[x].flag = DF_MANUAL;
     }
     conn = x;
 }
@@ -173,7 +210,7 @@ int send_trans(int len, int flag)
 	    perror("recv");
 	    exit(1);
 	}
-	if ((buf[0] & MT_MASK) == flag)
+	if (buf[0] == (flag|MT_RESP))
 	    return 0;
     }
     return -1;
@@ -186,13 +223,14 @@ int send_read(uint8_t *abuf, uint16_t addr, uint16_t len) {
     *p++ = MT_READ;
     *p++ = 0;
     *p++ = 0;
+    *p++ = 0;
     *p++ = addr >> 8;
     *p++ = addr & 0xff;
     *p++ = len >> 8;
     *p++ = len & 0xff;
     if (send_trans(p - obuf, MT_READ))
 	return -1;
-    memcpy(abuf, buf + 7, len);
+    memcpy(abuf, buf + 8, len);
     return 0;
 }
 
@@ -201,6 +239,7 @@ int send_write_ll(uint8_t *abuf, uint16_t addr, uint16_t len) {
     uint8_t *p = obuf;
     memset(obuf, 0, BUFLEN);
     *p++ = MT_WRITE;
+    *p++ = 0;
     *p++ = 0;
     *p++ = 0;
     *p++ = addr >> 8;
@@ -232,6 +271,7 @@ int send_exec(uint16_t addr){
     uint8_t *p = obuf;
     memset(obuf, 0, BUFLEN);
     *p++ = MT_EXEC;
+    *p++ = 0;
     *p++ = 0;
     *p++ = 0;
     *p++ = addr >> 8;
@@ -729,7 +769,7 @@ void do_fcn(void)
 void help(void)
 {
     puts("list                          list available cocos");
-    puts("connect [decimal]             connect to a coco");
+    puts("connect [decimal|ip]          connect to a coco");
     puts("probe                         probe connected coco");
     puts("dump addr                     dump memory");
     puts("poke [addr] [hex bytes...]    poke values into memory");
@@ -798,7 +838,9 @@ void process_time(void)
     int x;
 
     for (x = 0; x < DBNUM; x++){
-	if (db[x].flag != DF_EMPTY && time(NULL) > db[x].time){
+	if (db[x].flag != DF_EMPTY &&
+	    db[x].flag != DF_MANUAL &&
+	    time(NULL) > db[x].time){
 	    db[x].flag -= 1;
 	    db[x].time = time(NULL) + PTIME;
 	}
@@ -824,7 +866,8 @@ int main(int argc, char *argv[])
     }
 
     laddr.sin_family = AF_INET;
-    laddr.sin_port = htons(6999);
+    laddr.sin_port = htons(7000);
+    laddr.sin_addr.s_addr = htonl(0);
 
     raddr.sin_family = AF_INET;
 
