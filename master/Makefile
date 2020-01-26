@@ -8,7 +8,7 @@ bounce.h: bounce.s bounce09.s
 	xxd -i bounce09 >> bounce.h
 
 zombie: zombie.c bounce.h
-	gcc -o zombie zombie.c -ledit
+	gcc -o zombie zombie.c -lreadline
 
 ns: ns.c
 	gcc -o ns ns.c
