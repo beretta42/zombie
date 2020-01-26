@@ -7,7 +7,7 @@
 	export	dev_send
 	export	dev_init
 	export  dev_poll
-	
+
 ; Used by DWRead and DWWrite
 IntMasks equ   $50
 NOINTMASK equ  1
@@ -20,22 +20,30 @@ JMCPBCK  equ 0
 BAUD38400 equ 0
 
 
+;;; use this to prevent driver from turning off interrupts during use
+NOINTS	equ 0
+
+
 ACK	equ $42
 
-	
+
 	.area	.code
-	
+
 ; These files are copied almost as-is from HDB-DOS
 	*PRAGMA nonewsource
-         include "dw.def"
-         include "dwread.s"
-         include "dwwrite.s"
+	 include "dw.def"
+	 include "dwread.s"
+	 include "dwwrite.s"
 
-	
+
 ;;; Send packet via lwwire
 ;;;   takes: X = ptr to pdu
 ;;;   takes: D = size of pdu
-dev_send
+dev_send:
+	pshs	cc
+	IFEQ	NOINTS
+	orcc	#$50
+	ENDC
 	leax	-5,x
 	std	3,x
 	addd	#5
@@ -44,11 +52,16 @@ dev_send
 	std	0,x
 	ldb	#$02
 	stb	2,x
-	lbra	DWWrite
+	lbsr	DWWrite
+	puls	cc,pc
 
 ;;; Device initialization
 ;;;   return: C set on error
-dev_init
+dev_init:
+	pshs	cc
+	IFEQ	NOINTS
+	orcc	#$50
+	ENDC
 	ldd	#$f001
 	std	,--s
 	leax	,s
@@ -62,15 +75,21 @@ dev_init
 	puls	d
 	cmpa	#ACK
 	bne	err@
+	puls	cc
 	clra
 	rts
-err@	coma
+err@	puls	cc
+	coma
 	rts
 
 
 ;;; Poll device for awaiting packets
 ;;;   return C set on no packet waiting
-dev_poll	
+dev_poll:
+	pshs	cc
+	IFEQ	NOINTS
+	orcc	#$50
+	ENDC
 	;; see if any packet is waiting
 	ldd	#$0100
 	std	,--s
@@ -107,7 +126,9 @@ dev_poll
 	lbsr	DWRead
 	bne	no@
 	bcs	no@
-yes@	clra
+yes@	puls	cc
+	clra
 	rts
-no@	coma
+no@	puls	cc
+	coma
 	rts
