@@ -58,7 +58,8 @@ pong:
 	std	2,x
 	;; send to ip
 	ldd	rlen,pcr
-	lbra	ip_out
+	lbsr	ip_out
+	lbra	ip_drop
 
 
 icmp_out:
