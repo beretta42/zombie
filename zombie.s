@@ -81,6 +81,7 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	dhcp_init
 	lbcs	error
 	lbsr	print
+	lbsr	http_get
 	lbsr	igmp_test
 	lbsr	igmp_test
 	;; mdns

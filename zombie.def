@@ -157,3 +157,6 @@ igmp_test	extern
 
 
 mdns_init	extern
+
+
+http_get	extern
