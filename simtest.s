@@ -21,7 +21,6 @@ inmax	.dw	576+14+5	; max size of input buffer
 
 stack	rmb	64		; a private stack
 stacke
-ivect	rmb	2		; saved BASIC's irq vector
 sstack  rmb	2		; saved entry stack frame
 time	rmb	2		; a ticker
 atime	rmb	2		; announce every so often
@@ -31,8 +30,41 @@ atime	rmb	2		; announce every so often
 name	fcn	"BRETT'S COCO"
 ibroad	.db	255,255,255,255
 
+
+acia_handle
+	ldx	#mess@
+	jsr	puts
+	rti
+mess@	fcn	"acia"
+
+packet_handle
+	ldx	#mess@
+	jsr	puts
+	jsr	dev_in
+	rti
+mess@	fcn	"packet"
+
+reset_handle
+	ldx	#mess@
+	jsr	puts
+	rti
+mess@	fcn	"reset"
+	
 irq_handle
-	lda	$ff02		; clear pia
+	ldb	$ff00
+	bmi	acia_handle
+	ldb	$ff10
+	bmi	packet_handle
+	ldb	$ff20
+	bmi	timer_handle
+	ldb	$ff30
+	bmi	reset_handle
+	ldx	#mess@
+	jsr	puts
+	rti
+mess@	fcn	"unknown irq"
+	
+timer_handle
 	sts	sstack,pcr
 	leas	stacke,pcr
 	;; increment time
@@ -50,22 +82,52 @@ a@	std	atime,pcr
 	;; call ip6809's ticker
 	lbsr	tick
 	lds	sstack,pcr
-	;; is BASIC irq vector set?
-	ldd	ivect,pcr
-	beq	b@
-	;; yes tail call BASIC's normal vector
-	jmp	[ivect]
-	;; no just rti our selfs
 b@	rti
 
+
+put_char
+	stb	$ff01
+	rts
+	
+putstr	
+a@	ldb	,x+
+	beq	out@
+	stb	$ff01
+	bra	a@
+out@	rts
+
+puts
+	jsr	putstr
+	ldb	#10
+	stb	$ff01
+	rts
+	
+putdb	pshs	b
+	ldb	#2
+	stb	$ff00
+	ldb	#'d
+	stb	$ff01
+	puls	b,pc
+
+wait	pshs	b
+a@	ldb	$ff00
+	beq	a@
+	ldb	$ff01
+	puls	b,pc
+
+hello	fcn	"Zombie for Sim6809"
+
 start	orcc	#$50		; turn off interrupts
+	lds	#$8000
+	ldx	#hello
+	jsr	puts
+	ldb	#2		; don't buffer output
+	stb	$ff00
+	ldb	#$80		; turn on 60hz timer interrupts
+	stb	$ff20
 	ldd	#0
 	std	time,pcr
 	std	atime,pcr
-	ldx	$10d
-	stx	ivect,pcr
-	leax	irq_handle,pcr
-	stx	$10d
 	lbsr	ip6809_init	; initialize system
 	lbsr	dev_init	; init device
 	ldx	#$3900
@@ -76,13 +138,18 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	freebuff
 	ldx	#$4200		; add a buffers to freelist
 	lbsr	freebuff	;
+	jsr 	wait
+	ldx	#hello
+	jsr	puts
 	andcc	#~$10		; turn on irq interrupt
 	;; dhcp
 	leax	ibroad,pcr
 	lbsr	dhcp_init
 	lbcs	error
-	lbsr	print
-	lbsr	http_get
+	ldx	#mess@
+	lbsr	puts
+	jsr	print
+*	lbsr	http_get
 	lbsr	igmp_test
 	lbsr	igmp_test
 	;; mdns
@@ -105,12 +172,14 @@ b@	ldb	#C_UDP
 	;; initialize the timer
 	ldd	#ANN_TO
 	std	atime,pcr
-	;; go back to BASIC
-a@	rts
-error	inc	$501
-	lbsr	print
+a@	cwai	#$0
 	bra	a@
-
+error	ldx	#mess2@
+	jsr	puts
+	bra	a@
+mess@	fcn	"DHCP"
+mess2@	fcn	"Error"
+	
 ;; callback for received datagrams
 ;; just print the udp's data as a string
 call
@@ -168,8 +237,6 @@ cmd_exec
 	puls	x
 	ldu	sstack,pcr
 	stx	10,u
-	clr	ivect,pcr
-	clr	ivect+1,pcr
 	rts
 
 	;; mark packet as reply
@@ -204,51 +271,40 @@ a@	lda	,y+
 out@	rts
 
 
-cr	pshs	a
-	lda	#$d
-	jsr	$a282
-	puls	a,pc
-
-
-;;; print a char
-;;;   b = char
-;;;   modifies nothing
-;;;   returns nothing
-put_char
-	exg 	a,b
-	jsr	$a282
-	exg	a,b
-	rts
+cr	pshs	b
+	ldb	#10
+	stb	$ff01
+	puls	b,pc
 
 ;;; print ipv4 settings
 print
-	leax	a@-1,pcr
-	jsr	$b99c
+	leax	a@,pcr
+	jsr	putstr
 	leax	ipaddr,pcr
 	lbsr	ipprint
 	bsr	cr
-	leax	b@-1,pcr
-	jsr	$b99c
+	leax	b@,pcr
+	jsr	putstr
 	leax	ipmask,pcr
 	lbsr	ipprint
 	bsr	cr
-	leax	c@-1,pcr
-	jsr	$b99c
+	leax	c@,pcr
+	jsr	putstr
 	leax	ipbroad,pcr
 	lbsr	ipprint
 	bsr	cr
-	leax	d@-1,pcr
-	jsr	$b99c
+	leax	d@,pcr
+	jsr	putstr
 	leax	ipnet,pcr
 	lbsr	ipprint
 	bsr	cr
-	leax	e@-1,pcr
-	jsr	$b99c
+	leax	e@,pcr
+	jsr	putstr
 	leax	gateway,pcr
 	lbsr	ipprint
 	bsr	cr
-	leax	f@-1,pcr
-	jsr	$b99c
+	leax	f@,pcr
+	jsr	putstr
 	leax	dns,pcr
 	lbsr	ipprint
 	bsr	cr
@@ -259,3 +315,13 @@ c@	fcn	"BROADCAST "
 d@	fcn	"NETADDR   "
 e@	fcn	"GATEWAY   "
 f@	fcn	"DNS       "
+
+	.area	.intvec
+
+	.dw	0
+	.dw	0
+	.dw	0
+	.dw	irq_handle
+	.dw	0
+	.dw	0
+	.dw	start

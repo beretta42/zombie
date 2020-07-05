@@ -4,7 +4,9 @@
 	export	tab
 	export  rand
 	export  lfsr
-	
+	export  dev_in
+	export  dev_need_poll
+
 	.area	.data
 MAXBUF	equ	6		; fixme: defined by application
 	;; a array of connections/sockets
@@ -14,20 +16,23 @@ tabe
 bufs	rmb	2*MAXBUF	; free buffer stack space
 fptr	rmb	2		; free buffer stack pointer
 fno	rmb	1		; number of buffer on free list
-	
+
 conn	rmb	2		; working socket
 
 time	rmb	1		; polling pause timer
 itime	rmb	1		; pause this much time after empty polls
 
+dev_need_poll
+	rmb	1		; set by device driver if polling needed
+
 rand	rmb	2		; random number
-	
+
 	.area	.code
 
 
 ;;; add a packet buffer to freelist
 ;;;    takes: X = buffer ptr
-        export 	freebuff
+	export	freebuff
 freebuff
 	pshs	cc,u
 	cmpx	#0
@@ -44,7 +49,7 @@ out@	puls	cc,u,pc
 ;;     takes: nothing
 ;;     returns: X = buffer ptr
 ;;     returns: C set on error (out of buffers)
-        export	getbuff
+	export	getbuff
 getbuff	pshs	cc,u
 	orcc	#$10
 	tst	fno,pcr
@@ -68,10 +73,12 @@ ip_drop:
 	ldx	inbuf,pcr
 	lbsr	freebuff
 	puls	x,pc
-	
+
 ;;; init stack
 	export	ip6809_init
 ip6809_init
+	;; reset device polling flag
+	clr	dev_need_poll
 	;; set random number seed
 	ldd     #42
 	std	rand,pcr
@@ -97,7 +104,7 @@ ip6809_init
 ;;; get a socket
 ;;;   takes B = type (C_UDP)
 ;;;   sets conn to new socket, C set on error
-        export	socket
+	export	socket
 socket	pshs	x
 	lda	#8
 	leax	tab,pcr
@@ -119,7 +126,7 @@ found@	stx	conn,pcr
 ;;; send data to other end of socket
 ;;;   takes conn, X = pdu ptr, D = length
 ;;;   returns nothing
-        export	send
+	export	send
 send	; fixme: distribute to known protocols here
 	; for now just udp
 	lbra	udp_out
@@ -128,23 +135,39 @@ send	; fixme: distribute to known protocols here
 ;;; closes a socket
 ;;;    takes conn
 ;;;    returns nothing
-       	export close
+	export close
 close   clr    [conn,pcr]	; exciting!
 	rts
 
+;;; Call this when you know there's a packet waiting (say a interrupt
+;;; fired). If your drivers is polling, then this will be called from
+;;; tick().
+dev_in	ldx	inbuf,pcr	; push to seve input buffer ptr
+	pshs	x
+	lbsr	getbuff		; get new buffer
+	bcs	out@
+	stx	inbuf,pcr
+	lbsr	dev_poll
+	bcs	a@
+	ldx	inbuf,pcr	; send to ether layer
+	lbsr	eth_in
+	bra	out@
+a@	lbsr	ip_drop
+out@	puls	x
+	stx	inbuf,pcr
+	rts
 
 ;;; call this every tick
-        export tick
+	export tick
 tick	lbsr   lfsr
-	ldy    conn,pcr
-	ldx    inbuf,pcr	; push current working socket
-	pshs   x,y
+	ldx    conn,pcr
+	pshs   x
 	;; iterate through each socket
 	;; decrementing timer, and calling it's callback
 	;; if zero
-	lbsr    for_sock
-a@	lbsr    next_sock
-	bcs    poll@		; fixme: or should we goto poll?
+	lbsr   for_sock
+a@	lbsr   next_sock
+	bcs    cont@		; fixme: or should we goto poll?
 	ldx    conn,pcr
 	ldd    C_TIME,x
 	beq    a@
@@ -156,30 +179,23 @@ a@	lbsr    next_sock
 	ldb    #C_CALLTO
 	jsr    ,y
 	bra    a@
-	;; poll device
-debugp
-poll@	dec    time,pcr		; decrement poll timer
+	;; poll device - fixme: this may need a loop
+	;; to pull all packets from a polled device
+cont@	tst    dev_need_poll,pcr ;does device need polling?
+	beq    out@
+	dec    time,pcr		; decrement poll timer
 	bne    out@
-b@	lbsr   getbuff		; set buffer to new one
-	bcs    out@
-	stx    inbuf,pcr
-	lbsr   dev_poll
-	bcs    p@
-	ldx    inbuf,pcr
-	lbsr   eth_in
-	bra    b@
-p@	ldx    inbuf,pcr
-	lbsr   freebuff
 	ldb    itime,pcr	; reset pause timer
 	stb    time,pcr
-out@	puls   x,y
-	stx    inbuf,pcr
-	sty    conn,pcr
+	bra    dev_in		; go check for a packet
+out@	puls   x
+	stx    conn,pcr
 	rts
 
 
+
 ;;; start iterating over table via conn
-        export	for_sock
+	export	for_sock
 for_sock
 	pshs	x
 	leax	tab-C_SIZE,pcr
@@ -189,7 +205,7 @@ for_sock
 ;;; goto next socket
 ;;;    takes: nothing
 ;;;    returns: conn = next used socket, set C on none left
-    	export next_sock 
+	export next_sock
 next_sock
 	pshs	x
 	leax	tabe,pcr
@@ -219,22 +235,37 @@ a@	std	rand,pcr
 	rts
 
 
+;;; print a decimal char
+	export  put_dec
+put_dec pshs	d
+	clra
+a@	inca
+	subb	#10
+	bcc	a@
+	deca
+	addb	#10+$30
+	pshs	b
+	tfr	a,b
+	tstb
+	beq	b@
+	jsr	put_dec
+b@	puls	b
+	jsr	put_char
+out@	puls	d,pc
+
 ;;; print a ip address/mask
 ;;;    takes X - ip addr ptr
 	export	ipprint
 ipprint
-	pshs	d,x,u
+	pshs	d,x
 	lda	#4
 	sta	,-s
 	bra	b@
-a@	lda	#'.
-	jsr	$a282
-b@	clra
-	ldb	,x+
-	pshs	x
-	jsr	$bdcc
-	puls	x
+a@	ldb	#'.
+	lbsr	put_char
+b@	ldb	,x+
+	lbsr	put_dec
 	dec	,s
 	bne	a@
 	leas	1,s
-	puls	d,x,u,pc
+	puls	d,x,pc

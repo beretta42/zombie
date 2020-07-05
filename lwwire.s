@@ -59,6 +59,7 @@ dev_send:
 ;;;   return: C set on error
 dev_init:
 	pshs	cc
+	com	dev_need_poll
 	IFEQ	NOINTS
 	orcc	#$50
 	ENDC

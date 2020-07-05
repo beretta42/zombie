@@ -1,0 +1,7 @@
+section .start load 4500
+section .code
+section .data
+section .end
+section .intvec load fff2
+entry start
+

@@ -58,6 +58,8 @@ icmp_out	extern
 insize		extern
 inbuf		extern
 inmax		extern
+put_char	extern
+put_dec		extern
 
 dhcp_init	extern
 bootfile	extern
@@ -75,6 +77,8 @@ ans		extern
 
 rand		extern
 lfsr		extern
+
+dev_need_poll 	extern
 
 ; drop the current input buffer
 ip_drop		extern
@@ -110,6 +114,9 @@ close		extern
 
 ; call once per tick
 tick		extern
+
+;;; call when interrupt for packet rx
+dev_in		extern
 
 ;;; print a ip address/mask
 ;;;    takes X - ip addr ptr

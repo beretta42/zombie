@@ -48,6 +48,7 @@ setpp:
 ;;; Called to initialize Device
 ;;;   returns: C set on error
 dev_init:
+	com	dev_need_poll
 	pshs	x,y   ; save MAC address ptr
 	;; change cards address to our non mpi base (ff60)
 	ldd	#$55aa
