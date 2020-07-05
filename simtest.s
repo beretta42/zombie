@@ -308,6 +308,11 @@ print
 	leax	dns,pcr
 	lbsr	ipprint
 	bsr	cr
+	leax	g@,pcr
+	jsr	putstr
+	leax	bootfile,pcr
+	jsr	putstr
+	bsr	cr
 	rts
 a@	fcn	"IPADDR    "
 b@	fcn	"NETMASK   "
@@ -315,7 +320,7 @@ c@	fcn	"BROADCAST "
 d@	fcn	"NETADDR   "
 e@	fcn	"GATEWAY   "
 f@	fcn	"DNS       "
-
+g@	fcn	"BOOTFILE  "
 	.area	.intvec
 
 	.dw	0
