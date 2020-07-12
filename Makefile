@@ -19,7 +19,7 @@ simtest.o: simtest.s
 simtest.s19: $(OBJS) simnic.o simtest.o
 	lwlink -fsrec -m simtest.map -s sim.link -o simtest.s19 $(OBJS) simtest.o simnic.o
 
-zombie.bin: $(OBJS) coconic.o lwwire.o encrypt.o
+zombie.bin: $(OBJS) coconic.o lwwire.o encrypt.o zombie.o
 	lwlink -b -m zombie.map -s decb.link -o zombie.bin $(OBJS) zombie.o lwwire.o
 
 zombie.dsk: zombie.bin

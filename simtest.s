@@ -5,8 +5,11 @@
 	export  inmax
 	export  inbuf
 	export  put_char
+	export  CPS
 
-ANN_TO	equ	5*60		; announcement timeout (5 sec)
+CPS	equ	10
+
+ANN_TO	equ	5*CPS		; announcement timeout (5 sec)
 
 	.area	.start
 prog_start equ *
@@ -27,7 +30,7 @@ atime	rmb	2		; announce every so often
 
 	.area	.code
 
-name	fcn	"BRETT'S COCO"
+name	fcn	"BRETT VM"
 ibroad	.db	255,255,255,255
 
 
@@ -124,6 +127,7 @@ start	orcc	#$50		; turn off interrupts
 	ldb	#2		; don't buffer output
 	stb	$ff00
 	ldb	#$80		; turn on 60hz timer interrupts
+	ldb	#$80+100	; turn on .1hz timer
 	stb	$ff20
 	ldd	#0
 	std	time,pcr
@@ -138,9 +142,9 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	freebuff
 	ldx	#$4200		; add a buffers to freelist
 	lbsr	freebuff	;
-	jsr 	wait
-	ldx	#hello
-	jsr	puts
+*	jsr 	wait
+*	ldx	#hello
+*	jsr	puts
 	andcc	#~$10		; turn on irq interrupt
 	;; dhcp
 	leax	ibroad,pcr

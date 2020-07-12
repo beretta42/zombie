@@ -2,6 +2,8 @@
 ;;; Some common definitions
 ;;;
 
+CPS		extern
+
 dev_send	extern
 dev_poll	extern
 dev_init	extern

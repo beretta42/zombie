@@ -59,7 +59,7 @@ c@	lbsr	lfsr
 	ldd	rand,pcr
 	std	C_SNDN+2,x
 	;; set timeout, callback, retries
-	ldd	#60		; time out
+	ldd	#1*CPS		; time out
 	std	C_TIME,x
 	leay	cb_ssent,pcr
 	sty	C_CALL,x
@@ -104,7 +104,7 @@ listen_cb
 	std	C_DIP+2,y
 	;; set out timeout
 	ldx	conn,pcr
-	ldd	#60
+	ldd	#1*CPS
 	std	C_TIME,x
 	leay	cb_ssent,pcr
 	sty	C_CALL,x
@@ -244,7 +244,7 @@ out@	rts
 	;; timeout received for this socket
 	;; if send buffer is full then resend it
 	;; if not then just reset timer
-to@	ldd	#60
+to@	ldd	#1*CPS
 	std	C_TIME,y
 	ldd     C_SNDZ,y
 	lbne	tcp_tx
@@ -280,7 +280,7 @@ to@	dec	retry,pcr
 	beq	out1@
 	lbsr	tcp_syn
 	ldx	conn,pcr
-	ldd	#60
+	ldd	#1*CPS
 	std	C_TIME,x
 	rts
 out1@	inc	flag,pcr	; signal closed to userspace
@@ -512,7 +512,7 @@ c@	ldy	conn,pcr
 	adca	#0
 	std	C_SNDN,y
 	;; set ack timeout to 1 sec
-	ldd     #60
+	ldd     #1*CPS
 	std	C_TIME,y
 	;; figure and set the packet's size
 e@	tfr	x,d

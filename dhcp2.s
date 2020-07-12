@@ -231,7 +231,7 @@ poll	ldb	#4		; set retransmits to 4 then fail
 	stx	vect,pcr	; store the BOOTREQUEST method
 	jsr	[vect,pcr]      ; and call it to send initial packet
 	ldx	conn,pcr
-	ldd	#4*60		; set timeout to 4 sec
+	ldd	#4*CPS		; set timeout to 4 sec
 	std	C_TIME,x
 	clr	flag,pcr        ; clear return flag
 	;; loop processing packets until the flag is set
@@ -271,7 +271,7 @@ cb_offer
 to@	dec	retry,pcr
 	beq	fail@           ; no failing on out-of-retries yet
 	jsr	[vect,pcr]        ; send BOOTREQUEST packet again
-	ldd	#4*60		; reset timer fixme: this should backoff
+	ldd	#4*CPS		; reset timer fixme: this should backoff
 	ldx	conn,pcr
 	std	C_TIME,x
 	rts

@@ -7,7 +7,7 @@
 
 	export	ans
 
-DNSTO	equ	3*60		; 2 second timeout
+DNSTO	equ	3*CPS		; 3 second timeout
 	
 	.area	.data
 retry	rmb	1		; send this many queries, max

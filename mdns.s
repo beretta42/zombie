@@ -203,7 +203,7 @@ d@	tst	lno,pcr
 	lbsr	lfsr		; pump random
 	ldb	rand,pcr	; get random no.
 	clra
-	andb	#31		; from 1 - 32 jiffies (16-500ms)
+	andb	#7		; from 1 - 32 jiffies (16-500ms)
 	beq	d@
 	ldy	conn,pcr
 	std	C_TIME,y

@@ -5,8 +5,11 @@
 	export  inmax
 	export  inbuf
 	export  put_char
+	export	CPS
 
-ANN_TO	equ	5*60		; announcement timeout (5 sec)
+CPS	equ	60
+
+ANN_TO	equ	5*CPS		; announcement timeout (5 sec)
 
 	.area	.start
 prog_start equ *
