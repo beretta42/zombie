@@ -187,7 +187,7 @@ cont@	tst    dev_need_poll,pcr ;does device need polling?
 	bne    out@
 	ldb    itime,pcr	; reset pause timer
 	stb    time,pcr
-	bra    dev_in		; go check for a packet
+	bsr    dev_in		; go check for a packet
 out@	puls   x
 	stx    conn,pcr
 	rts
