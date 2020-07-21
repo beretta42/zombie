@@ -167,7 +167,9 @@ b@	lbsr   getbuff		; set buffer to new one
 	bcs    p@
 	ldx    inbuf,pcr
 	lbsr   eth_in
-	bra    b@
+	ldb    #1
+	stb    time,pcr
+	bra    out@
 p@	ldx    inbuf,pcr
 	lbsr   freebuff
 	ldb    itime,pcr	; reset pause timer
