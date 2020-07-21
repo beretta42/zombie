@@ -153,8 +153,6 @@ pdebug
 ;; callback for established state
 	export	cb_estab
 cb_estab
-	bsr	pdebug
-	.db	'a
 	ldx	hptr,pcr
 	ldy	conn,pcr
 	cmpb	#C_CALLTO
@@ -168,12 +166,10 @@ cb_estab
 	cmpd	C_RCVN+2,y
 	lbne	drop_and_ack
 	inc	flag,pcr
-	;; check ack: if this packet acklowedges our
+	;; check ack: if this packet ackowledges our
 	;; queued send buffer then release it.
 	ldd	C_SNDZ,y	; buffer empty?
 	beq	d@
-	bsr	pdebug
-	.db	'b
 	ldd     8,x
 	cmpd	C_SNDN,y
 	bne	d@
@@ -184,43 +180,27 @@ cb_estab
 	lbsr	freebuff
 	clr	C_SNDZ,y
 	clr	C_SNDZ+1,y
-	;; if the receive buffer is free
-	;; then store this buffer
+	;; then store data bytes (if any) from this buffer
 d@	ldd	#$0001		; push ack / release buffer flags
 	pshs	d
-	ldd	pdulen,pcr	; if no data bytes...skip
+	ldd	pdulen,pcr	; get data bytes
 	beq	b@
-	ldd	C_RCVZ,y	; if user buffer full.. skip
-	beq	z@
-	;; our buff is full
 	inc	,s
-	bra	a@
-	;; our buff is empty to add data
-z@	ldd	pdu,pcr
-	bsr	pdebug
-	.db	'c
-	std	C_RCVD,y
+	ldx	pdu,pcr		; get data addr
+	lbsr	add_to_ring	; D = # bytes xfered to ring
+	;; add bytes xfers to tcp ack no
 	ldd	pdulen,pcr
-	std	C_RCVZ,y
-	ldd	inbuf,pcr	; save frame buffer for releasing later
-	std	C_RCVB,y
-	;; adjust expected sequence no for next
-	ldd	C_RCVZ,y
 	addd	C_RCVN+2,y
 	std	C_RCVN+2,y
 	ldd	C_RCVN,y
 	adcb	#0
 	adca	#0
 	std	C_RCVN,y
-	inc	,s		; set send ack flag
-	clr	1,s		; don't release buffer
 	;; is this a FIN packet?
 b@	ldx     hptr,pcr
 	ldb	13,x
 	bitb	#1
 	beq	a@
-	lbsr	pdebug
-	.db	'd
 	ldy     conn,pcr
 	inc	,s		; set send ack flag
 	;; remember remote has closed
@@ -249,11 +229,12 @@ to@	ldd	#1*CPS
 	ldd     C_SNDZ,y
 	lbne	tcp_tx
 	lbra	tcp_ack
+	rts
+
 drop_and_ack
-	lbsr	pdebug
-	.db	'e
 	lbsr	ip_drop
 	lbra	tcp_ack
+
 
 ;; callback for active open, sync sent state
 	export	cb_ssent
@@ -314,14 +295,19 @@ tcp_syn
 	ldd	#0
 	std	,x++		; msb ack
 	std	,x++		; lsb ack
-	ldd	#$5002		; data offset, syn
+	ldd	#$6002		; data offset, syn
 	std	,x++
-	ldd	#$200		; window
+*	ldd	#BUFZ		; window
+	ldd	bfree
 	std	,x++
 	ldd	#0		; cksum
 	std	,x++
 	ldd	#0
 	std	,x++		; urg ptr
+	ldd	#$0204
+	std	,x++		; option 2 mms
+	ldd	#512
+	std	,x++		; mms
 	ldb	#6
 	stb	proto,pcr
 	ldd	C_DIP,y
@@ -360,7 +346,8 @@ a@	lbsr	getbuff
 	std	,x++		; lsb ack
 	ldd	#$5010		; data offset, ack
 	std	,x++
-	ldd	#$200		; window
+*	ldd	#BUFZ		; window
+	ldd	bfree
 	std	,x++
 	ldd	#0		; cksum
 	std	,x++
@@ -385,8 +372,6 @@ a@	lbsr	getbuff
 ;;;   takes: conn - socket ptr
 	export  tcp_close
 tcp_close
-	lbsr	pdebug
-	.db	'f
 	ldy	conn,pcr
 	;; send FIN
 	ldb	#1		; set fin bit on empty packet
@@ -412,32 +397,21 @@ a@	tst	flag,pcr
 tcp_recv
 	pshs	d,x,y,u
 	ldy	conn,pcr
-	;; sping until there's data or closed/reset
-a@	ldd	C_RCVZ,y	; check for data
+	;; spin until there's data or closed/reset
+a@	ldd	#BUFZ
+	subd	bfree
 	bne	c@
 	tst	C_TFLG2,y	; remote closed?
 	bne	closed@
-	clr	flag,pcr	; spin for activity
-x@	tst	flag,pcr
-	beq	x@
 	bra	a@
-	;; copy data to application
-c@	std	,s
-	ldu	C_RCVD,y
-	tfr	d,y
-b@	lda	,u+
-	sta	,x+
-	leay	-1,y
-	bne	b@
-	;; free recv buffer, clear
-	;; buffer size to allow more data
-	ldy     conn,pcr
-	ldx	C_RCVB,y
-	lbsr	freebuff
-	clr	C_RCVZ,y
-	clr	C_RCVZ+1,y
-	clra
-d@	puls	d,x,y,u,pc
+	;; copy data to ring buffer
+c@	cmpd	,s
+	blo	b@
+	ldd	,s
+b@	lbsr	rm_from_ring
+	std	,s
+	lbsr	tcp_ack
+	puls	d,x,y,u,pc
 closed@	clr	,s
 	clr	1,s
 	puls	d,x,y,u,pc
@@ -476,7 +450,8 @@ d@	lbsr	getbuff
 	ldd	#$5010		; data offset, ack
 	orb	C_TFLG,y	; or in additional flags
 	std	,x++
-	ldd	#$200		; window (may want to send this in tcp_tx)
+*	ldd	#BUFZ		; window (may want to send this in tcp_tx)
+	ldd	bfree
 	std	,x++
 	ldd	#0		; cksum  (filled out later)
 	std	,x++
@@ -629,14 +604,74 @@ tcp_init
 	clr	eport+1,pcr
 	rts
 
+BUFZ	equ	1024
+
+buf	rmb	BUFZ
+bfree	.dw	BUFZ
+biptr	.dw	buf
+boptr	.dw	buf
 
 ;;; add data to ring buffer
 ;;;   x = data ptr
 ;;;   d = size
+;;; returns: d = bytes copied
+;;;  fixme: make this better by calculating memory cpy sizes
+;;;  fixme: make PIC
+;;;  fixme: put vars in socket structure
 add_to_ring:
-	pshs	d,x,y
-	;; find minimum of buffer or passed size
-	;; copy to tail of buffer
-	;; if necessary, copy to head of buffer
-	;; 
-	puls	d,x,y,pc
+	pshs	cc
+	orcc	#$50
+	pshs	d,x,y,u
+	;; find minimum of buffer and passed size
+	cmpd	bfree
+	blo	a@
+	ldd	bfree
+a@	std	,s
+	beq	c@
+	tfr	d,y
+	ldu	biptr
+b@	lda	,x+
+	sta	,u+
+	cmpu	#buf+BUFZ
+	bne	d@
+	ldu	#buf
+d@	leay	-1,y
+	bne	b@
+	ldd	bfree
+	subd	,s
+	std	bfree
+	stu 	biptr
+c@	puls	d,x,y,u
+	puls	cc,pc
+
+;;; unqueue data from ring buffer
+;;;   x = data ptr
+;;;   d = no of bytes
+;;; returns: D = number of bytes copied
+rm_from_ring
+	pshs	cc
+	orcc	#$50
+	pshs	d,x,y,u
+	ldd	#BUFZ
+	subd	bfree
+	cmpd	,s
+	blo	a@
+	ldd	,s
+a@	std	,s
+	beq	c@
+	tfr	d,y
+	ldu	boptr
+b@	lda	,u+
+	sta	,x+
+	cmpu	#buf+BUFZ
+	bne	d@
+	ldu	#buf
+d@	leay	-1,y
+	bne	b@
+	;; adjust size, ptr of buffer
+	ldd	bfree
+	addd	,s
+	std	bfree
+	stu	boptr
+c@	puls	d,x,y,u
+	puls	cc,pc

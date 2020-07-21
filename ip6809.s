@@ -151,6 +151,8 @@ dev_in	ldx	inbuf,pcr	; push to seve input buffer ptr
 	bcs	a@
 	ldx	inbuf,pcr	; send to ether layer
 	lbsr	eth_in
+	ldb	#1
+	stb	time,pcr
 	bra	out@
 a@	lbsr	ip_drop
 out@	puls	x
