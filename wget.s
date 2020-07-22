@@ -3,6 +3,7 @@
 
 	include "zombie.def"
 
+BS	equ	$08
 LF	equ	$0a
 CR	equ	$0d
 SP	equ	$20
@@ -26,8 +27,19 @@ ctos	.dw	ctos
 
 
 putb	exg	a,b
+	cmpa	#LF
+	bne	a@
+	lda	#CR
+a@	cmpa	#9
+	beq	tab@
 	jsr	$a282
 	exg	a,b
+	rts
+tab@	ldb	#SP
+	bsr	putb
+	bsr	putb
+	bsr	putb
+	bsr	putb
 	rts
 
 puts	pshs	x
@@ -35,10 +47,28 @@ a@	ldb	,x+
 	beq	out@
 	bsr	putb
 	bra	a@
-out@	ldb	#CR
-	bsr	putb
-	puls	x,pc
+out@	puls	x,pc
 
+putscr	bsr	puts
+	ldb	#CR
+	bsr	putb
+	rts
+
+putm	pshs	x,y
+	cmpd	#0
+	beq	out@
+	tfr	d,y
+a@	ldb	,x+
+	bsr	putb
+	leay	-1,y
+	bne	a@
+out@	puls	x,y,pc
+
+
+drop	ldu	ctos
+	leau	4,u
+	stu	ctos
+	rts
 
 zero	ldu	ctos
 	ldd	#0
@@ -107,6 +137,61 @@ a@	ldb	,x+
 done@	rts
 
 
+;;; pointers to string-ified URL
+host	.dw	0
+user	.dw	0
+port	.dw	0
+path	.dw	0
+defpath fcn	"/"
+
+;;; parse a Url
+;;; x = URL buffer
+;;; returns
+parse_url
+	ldd	#80		; set default port
+	std	port
+	ldd	#defpath
+	std	path
+	pshs	y
+	ldy	#p@		; check for "http://"
+	jsr	strcmp
+	bne	err@
+	leax	7,x		; x points past "http://"
+	stx	host
+a@	ldb	,x+
+	beq	ok@
+	cmpb	#':
+	beq	port@
+	cmpb	#'@
+	beq	user@
+	cmpb	#'/
+	beq	end@
+	bra	a@
+end@	clr	-1,x
+	ldb	,x
+	stx	path
+	bra	ok@
+port@	clr	-1,x
+	jsr	atol
+	ldy	ctos
+	leax	-1,x
+	stx	path
+	ldd	2,y
+	std	port
+	jsr	drop
+	leax	-1,x
+	bra	ok@
+user@	clr	-1,x
+	ldy	host
+	sty	user
+	stx	host
+	bra	a@
+ok@	clra
+	puls	y,pc
+err@	coma
+	puls	y,pc
+p@	fcn	"http://"	; fixme: for now we'll require an authority
+
 ;;; gets a byte from TCP
 getb:	pshs	a,x
 	;; test for bytes in local buffer
@@ -149,7 +234,7 @@ status
 	ldx	#lbuf
 	ldb	#255
 	jsr	gets		; get a line
-	jsr	puts		; print it
+	jsr	putscr		; print it
 a@	ldb	,x+
 	beq	nf@
 	cmpb	#SP
@@ -177,7 +262,7 @@ a@	ldx	#lbuf
 	jsr	gets
 	tst	,x		; is empty (CRLF) only
 	beq	out@
-	jsr	puts
+*	jsr	puts
 	ldy	#lenstr@
 	jsr	strcmp
 	beq	len@
@@ -185,6 +270,7 @@ a@	ldx	#lbuf
 out@	rts
 len@	leax	16,x
 	jsr	atol
+	lbsr	drop
 	bra	a@
 lenstr@ fcn	"Content-Length: "
 
@@ -198,48 +284,128 @@ a@	tst	,x+
 	lbsr	tcp_send
 	puls	d,x,pc
 
+
+lptr	.dw	lbuf
+
+appstr	ldu	lptr
+a@	ldb	,x+
+	beq	out@
+	stb	,u+
+	bra	a@
+out@	stu	lptr
+	rts
+
+sendstr	ldd	lptr
+	subd	#lbuf
+	ldx	#lbuf
+	lbsr	tcp_send
+	ldd	#lbuf
+	std	lptr
+	rts
+
+prompt	ldx	#p@
+	lbra	puts
+p@	fcn	"url > "
+
+getchar	pshs	a
+a@	jsr	$a1cb
+	beq	a@
+	jsr	$a282
+	tfr	a,b
+	puls	a,pc
+
+	.area	.data
+urlbuf	rmb	256
+	.area	.code
+
+geturl	pshs	x
+	ldx	#urlbuf
+a@	jsr	getchar
+	cmpb	#CR
+	beq	cr@
+	cmpb	#BS
+	beq	bs@
+	stb	,x+
+	bra	a@
+cr@	clr	,x
+	puls	x,pc
+bs@	leax	-1,x
+	bra	a@
+
 http_get:
+b@	bsr	prompt
+	bsr	geturl
+	ldx	#urlbuf
+	jsr	putscr
+	ldx	#urlbuf
+	jsr	parse_url
+	;; send host name to resolver
+	ldx	host
+	jsr	resolve
+	bcs	b@
 	;; setup internal buffer
-	clr	len
+a@	clr	len
 	ldb	#C_TCP
 	lbsr	socket
 	;; fixme: error check here
 	ldx	conn,pcr
-	ldd	#$0a08
+	ldd	ans
 	std	C_DIP,x
-	ldd	#$0001
+	ldd	ans+2
 	std	C_DIP+2,x
-	ldd	#80
+	ldd	port
 	std	C_DPORT,x
 	lbsr	tcp_connect
+	bcs	out@
 	;; send GET request
-	leax	msg,pcr
-	lbsr	sends
+	ldx	#msg1
+	jsr	appstr
+	ldx	path
+	jsr	appstr
+	ldx	#msg2
+	jsr	appstr
+	jsr	sendstr
+	ldx	#msg3
+	jsr	appstr
+	ldx	host
+	jsr	appstr
+	ldx	#msg4
+	jsr	appstr
+	jsr	sendstr
+	ldx	#msg5
+	jsr	appstr
+	jsr	sendstr
 	;; get replay
 	jsr	status
 	cmpb	#2
 	bne	out@
 	;; get headers
 	jsr	headers
-	;; get payload
+	;; print payload still in the buffer
+	ldx	ptr
+	clra
+	ldb	len
+	jsr	putm
+	;; print payload from rest of reads
 c@	leax	buf,pcr
 	ldd	#1024
 	lbsr	tcp_recv
 	cmpd	#0
 	beq	out@
-	lda	#'.
-	jsr	$a282
+	lbsr	putm
 	bra	c@
 out@	ldx	conn,pcr
 	lbsr	tcp_close
+	lbsr	close
+	lbra	b@
 d@	inc	$400
 	bra	d@
 
 
-
-msg:	fcc	"GET / HTTP/1.0"
-	.dw	CRLF
-	fcc	"Host: fuzix.play-classics.net"
-	.dw	CRLF
-	fcc	"User-Agent: wget-for-ip6809/.0"
+msg1:	fcn	"GET "
+msg2:	fcc	" HTTP/1.0"
+	.dw	CRLF,0
+msg3:	fcn	"Host: "
+msg4:	.dw	CRLF,0
+msg5:	fcc	"User-Agent: wget-for-ip6809/.0"
 	.dw	CRLF,CRLF,0
