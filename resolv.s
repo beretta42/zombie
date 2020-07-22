@@ -1,14 +1,14 @@
 ;;;
 ;;;
 ;;;  This is a simple internet name resolver
-;;; 
+;;;
 ;;;
 	include "zombie.def"
 
 	export	ans
 
 DNSTO	equ	3*CPS		; 3 second timeout
-	
+
 	.area	.data
 retry	rmb	1		; send this many queries, max
 ans	rmb	4		; resolved address, if any
@@ -17,6 +17,39 @@ qptr	rmb	2		; ptr to query text name
 
 	.area	.code
 
+;;; convert string to ip address
+;;;  takes: X - str ptr
+;;;  return: C set on error, ip in ans
+;;; fixme: this doesn't check for out of range octets
+atoip	ldb	#3		; how many octets are we allowed?
+	pshs	b
+	leay	ans,pcr
+b@	clra
+a@	ldb	,x+
+	beq	out@
+	cmpb	#'.
+	beq	store@
+	subb	#'0
+	bmi	err@
+	cmpb	#9
+	bhi	err@
+	pshs	b
+	ldb	#10
+	mul
+	tfr	b,a
+	adda	,s+
+	bra	a@
+store@	tst	,s		; too many dots? then error
+	beq	err@
+	sta	,y+
+	bra	b@
+out@	sta	,y+
+	clra
+	puls	b,pc
+err@	coma
+	puls	b,pc
+
+
 ;;; resolves name
 ;;;   takes X = name
 ;;;   returns X = ptr to ip
@@ -24,11 +57,15 @@ qptr	rmb	2		; ptr to query text name
       export  resolve
 resolve
 	stx	qptr,pcr
+	;; first, try to directly convert to ip
+	bsr	atoip
+	bcc	ok@
+	;; not an IP so do a DNS lookup
 	ldb	#3
 	stb	retry,pcr
 	clr	flag,pcr
 	;; make and bind socket - DNS
-	ldb	#C_UDP	 	; socket is a UDP
+	ldb	#C_UDP		; socket is a UDP
 	lbsr	socket
 	bcs	bad@		; handle running out of sockets
 	ldx	conn,pcr	; conn is newly opened sockets
@@ -47,17 +84,19 @@ a@	tst	flag,pcr
 	beq	a@
 out@	lbsr	close
 	ldb	#1
+	leax	ans,pcr
 	cmpb	flag,pcr
 	rts
 bad@	coma
 	rts
+ok@	clra
+	rts
 
 
-	export	query
 ;; send query packet to server
 query
 	lbsr	getbuff
-	bcs	err@	
+	bcs	err@
 	pshs	x
 	leax	47,x		; leave room for lower layer
 	pshs	x
@@ -84,7 +123,7 @@ query
 	puls	x
 	lbra	freebuff
 err@	rts
-	
+
 appname
 	ldy	qptr,pcr
 a@	leau	,x+
@@ -102,7 +141,6 @@ out@	stb	,u+
 	clr	,x+
 	rts
 
-	export  call
 call	cmpb	#C_CALLTO
 	beq	to@
 	;; filter out bad answers
@@ -114,20 +152,38 @@ call	cmpb	#C_CALLTO
 	bita	#$80
 	beq	out@
 	bitb	#$f		; error code?
-	bne	out@
+	bne	err@
 	ldd	6,x		; answers?
 	beq	out@
 	;; ok this is our answer packet
-	leau    12,x		; scan/skip questions
+	;; skip overs questions
+	leau    12,x
 a@	bsr	skip
-next@	leau	4,u		; skip over type/class
+	leau	4,u		; skip over type/class
 	ldd	4,x		; decrement question number
 	subd	#1
 	std	4,x
 	bne	a@
+	;; scan our answers for matching type
+b@	bsr	skip		; skip name
+	ldd	,u		; check type (A)
+	cmpd	#1
+	bne	next@
+	ldd	2,u		; check class (IN)
+	cmpd	#1
+	bne	next@
+	bra	ans@
+	;; it doesn't match goto next answer
+next@	leau	8,u		; skip TTL
+	ldd	,u++		; get answer length
+	leau	d,u		; skip it
+	ldd	6,x		; decrement answer number
+	subd	#1
+	std	6,x
+	bne	b@		; get another
+	bra	err@		; all out of answers!
 	;; U points to first answer, get it.
-ans@	bsr	skip
-c@	leau	10,u
+ans@	leau	10,u
 	ldd	,u++
 	std	ans,pcr
 	ldd	,u
