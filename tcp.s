@@ -39,6 +39,7 @@ a@	tst	flag,pcr
 ;;;   takes: conn = socket
 	export tcp_connect
 tcp_connect
+	lbsr	initbuf
 	ldx	conn,pcr
 	;; if ephemeral ports isn't set up
 	;; then set.
@@ -611,6 +612,14 @@ bfree	.dw	BUFZ
 biptr	.dw	buf
 boptr	.dw	buf
 
+
+initbuf	ldd	#BUFZ
+	std	bfree
+	leax	buf,pcr
+	stx	biptr
+	stx	boptr
+	rts
+
 ;;; add data to ring buffer
 ;;;   x = data ptr
 ;;;   d = size
@@ -640,7 +649,7 @@ d@	leay	-1,y
 	ldd	bfree
 	subd	,s
 	std	bfree
-	stu 	biptr
+	stu	biptr
 c@	puls	d,x,y,u
 	puls	cc,pc
 
