@@ -61,7 +61,15 @@ a@	std	atime,pcr
 	;; no just rti our selfs
 b@	rti
 
+hello_m	fcn	"ZOMBIE FOR COCO"
+dhcp_m	fcn	"TRYING DHCP"
+dhcp_fail_m
+	fcn	"DHCP FAILED"
+mdns_m	fcn	"STARTING MDNS"
+
 start	orcc	#$50		; turn off interrupts
+	ldx	#hello_m
+	lbsr	puts
 	ldd	#0
 	std	time,pcr
 	std	atime,pcr
@@ -81,15 +89,20 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	freebuff	;
 	andcc	#~$10		; turn on irq interrupt
 	;; dhcp
+	ldx	#dhcp_m
+	lbsr	puts
 	leax	ibroad,pcr
 	lbsr	dhcp_init
 	lbcs	error
 	lbsr	print
-	lbsr	http_get
-	lbsr	igmp_test
-	lbsr	igmp_test
 	;; mdns
+	ldx	#mdns_m
+	lbsr	puts
+	lbsr	igmp_test
+	lbsr	igmp_test
 	lbsr	mdns_init
+	;; testing here
+	lbsr	http_get
 	;; start zombie
 	;; setup a socket
 b@	ldb	#C_UDP
@@ -110,8 +123,8 @@ b@	ldb	#C_UDP
 	std	atime,pcr
 	;; go back to BASIC
 a@	rts
-error	inc	$501
-	lbsr	print
+error	ldx	#dhcp_fail_m
+	lbsr	puts
 	bra	a@
 
 ;; callback for received datagrams
@@ -207,54 +220,67 @@ a@	lda	,y+
 out@	rts
 
 
-cr	pshs	a
-	lda	#$d
-	jsr	$a282
-	puls	a,pc
-
-
 ;;; print a char
 ;;;   b = char
 ;;;   modifies nothing
 ;;;   returns nothing
 put_char
-	exg 	a,b
+	exg	a,b
 	jsr	$a282
 	exg	a,b
 	rts
 
+cr	ldb	#$d
+	lbra	put_char
+
+
+putstr	pshs	x
+a@	ldb	,x+
+	beq	out@
+	lbsr	put_char
+	bra	a@
+out@	puls	x,pc
+
+puts	lbsr	putstr
+	bra	cr
+
 ;;; print ipv4 settings
 print
-	leax	a@-1,pcr
-	jsr	$b99c
+	leax	a@,pcr
+	jsr	putstr
 	leax	ipaddr,pcr
 	lbsr	ipprint
 	bsr	cr
-	leax	b@-1,pcr
-	jsr	$b99c
+	leax	b@,pcr
+	jsr	putstr
 	leax	ipmask,pcr
 	lbsr	ipprint
 	bsr	cr
-	leax	c@-1,pcr
-	jsr	$b99c
+	leax	c@,pcr
+	jsr	putstr
 	leax	ipbroad,pcr
 	lbsr	ipprint
 	bsr	cr
-	leax	d@-1,pcr
-	jsr	$b99c
+	leax	d@,pcr
+	jsr	putstr
 	leax	ipnet,pcr
 	lbsr	ipprint
 	bsr	cr
-	leax	e@-1,pcr
-	jsr	$b99c
+	leax	e@,pcr
+	jsr	putstr
 	leax	gateway,pcr
 	lbsr	ipprint
 	bsr	cr
-	leax	f@-1,pcr
-	jsr	$b99c
+	leax	f@,pcr
+	jsr	putstr
 	leax	dns,pcr
 	lbsr	ipprint
 	bsr	cr
+	leax	g@,pcr
+	jsr	putstr
+	leax	bootfile,pcr
+	jsr	putstr
+	lbsr	cr
 	rts
 a@	fcn	"IPADDR    "
 b@	fcn	"NETMASK   "
@@ -262,3 +288,4 @@ c@	fcn	"BROADCAST "
 d@	fcn	"NETADDR   "
 e@	fcn	"GATEWAY   "
 f@	fcn	"DNS       "
+g@	fcn	"BOOTFILE  "
