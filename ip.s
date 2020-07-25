@@ -16,6 +16,8 @@
 	export	gateway
 	export	dns
 	export  ip_setmask
+	export  ip_send
+	export  ip_cont_filter
 
 	.area	.data
 ipaddr	rmb	4		; our IP address
@@ -28,19 +30,10 @@ dns	rmb	4		; our dns server
 dipaddr rmb	4		; destination ip address
 proto	rmb	1		; layer 4 protocol (udp)
 ripaddr	rmb	4		; most recv packet source ip (remote)
-rlen	rmb	2		; length of recv packet PDU 
+rlen	rmb	2		; length of recv packet PDU
 end	
 	.area	.code
 
-
-
-;;; sets ip address
-;;;   takes X - ptr to ip4 address
-	ldd	,x
-	std	ipaddr,pcr
-	ldd	2,x
-	std	ipaddr+2,pcr
-	rts
 
 ;;; sets ip network address
 ;;;   takes X - ptr to mask
@@ -94,7 +87,7 @@ ip_init:
 ;;; Process incoming layer 3 ip packets
 ;;;   takes: X - ptr layer 2 pdu (start of ip header)
 ;;;   returns: C clear if
-ip_in:	
+ip_in:
 	;; check version (we only do version 4)
 	ldb	,x
 	andb	#$f0
@@ -124,7 +117,8 @@ a@	leau	16,x		; is Our IP?
 	beq	cont@
 b@	lbra	ip_drop
 	;; packet looks good
-cont@	ldd	12,x		; save source ip for use later
+cont@	stx	pdu,pcr		; save pointer to IP packet for layer
+	ldd	12,x		; save source ip for use later
 	std	ripaddr,pcr
 	ldd	14,x
 	std	ripaddr+2,pcr
@@ -136,6 +130,7 @@ cont@	ldd	12,x		; save source ip for use later
 	clra
 	pshs	d
 	ldd	2,x
+	std	pdulen,pcr
 	subd	,s++
 	std	rlen,pcr
 	puls	b
@@ -149,7 +144,27 @@ cont@	ldd	12,x		; save source ip for use later
 	lbeq	tcp_in		; go process tcp
 	cmpa	#2		; is igmp?
 	lbeq    igmp_in		; go answer queries
-	lbra	ip_drop
+	;; scan for matching socket
+ip_cont_filter
+	ldx	pdu,pcr
+	lbsr	for_sock
+c@	lbsr	next_sock
+	lbcs	ip_drop
+	ldy	conn,pcr
+	ldb	C_FLG,y
+	cmpb	#C_IP
+	bne	c@
+	ldb	C_DPORT+1,y
+	cmpb	9,x
+	bne	c@
+	;; found socket record pdu / length
+	;; call the callback
+	ldx	conn,pcr
+	ldx	C_CALL,x
+	beq	d@
+	ldb	#C_CALLRX
+	jsr	,x
+d@	rts
 
 
 
@@ -212,3 +227,16 @@ b@	coma
 	puls	x,pc
 	
 
+;;; ip user interface
+ip_send
+	;; Setup IP layor for sending
+	pshs	d,x
+	ldx	conn,pcr
+	ldd	C_DIP,x		; fixme: BAD I shouldn't have to do this!!!
+	std	dipaddr,pcr
+	ldd	C_DIP+2,x
+	std	dipaddr+2,pcr
+	ldb	C_DPORT+1,x
+	stb	proto,pcr
+	puls	d,x
+	lbra	ip_out

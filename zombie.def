@@ -17,7 +17,9 @@ memcpy		extern
 
 ip_init		extern
 ip_in		extern
+ip_cont_filter  extern
 ip_out		extern
+ip_send		extern
 ip_cmp		extern
 ip_cksum	extern
 ip_setmask	extern
@@ -55,7 +57,6 @@ tcp_in		extern
 tcp_init	extern
 
 icmp_in		extern
-icmp_out	extern
 
 insize		extern
 inbuf		extern
@@ -147,7 +148,7 @@ C_SIZE		equ	*	; size of this struct
 
 C_UDP		equ	1
 C_TCP		equ	2
-C_ICMP		equ	3
+C_IP		equ	4
 
 ; these status codes are sent to callback functon
 ; to indicate what's going on...

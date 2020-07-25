@@ -7,6 +7,8 @@
 	export  put_char
 	export	CPS
 
+	import	ping
+
 CPS	equ	60
 
 ANN_TO	equ	5*CPS		; announcement timeout (5 sec)
@@ -102,6 +104,7 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	igmp_test
 	lbsr	mdns_init
 	;; testing here
+*	lbsr	ping
 	lbsr	http_get
 	;; start zombie
 	;; setup a socket
