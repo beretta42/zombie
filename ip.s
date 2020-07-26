@@ -207,17 +207,19 @@ ip_out:
 ;;;   takes Y = length
 ip_cksum:
 	pshs	x
-	exg 	d,y
+	exg 	d,y		; figure out how many double bytes
 	lsra
 	rorb
-	pshs	cc
+	pshs	cc		; C sit set if there's an odd byte
 	exg	d,y
-a@	addd	,x++
-	adcb	#0
-	adca	#0
+	andcc	#~1
+a@	adcb	1,x
+	adca	,x++
 	leay	-1,y
 	bne	a@
-	puls	cc
+	adcb	#0
+	adca	#0
+c@	puls	cc
 	bcc	b@
 	adda	,x+
 	adcb	#0
