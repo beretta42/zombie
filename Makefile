@@ -4,7 +4,7 @@ AS = lwasm
 ASFLAGS = -f obj 
 
 SRCS = arp.s ip.s eth.s udp.s icmp.s dhcp2.s ip6809.s \
-	resolv.s tcp.s encrypt.s igmp.s mdns.s wget.s ping.s
+	resolv.s tcp.s encrypt.s igmp.s mdns.s wget.s ping.s ethtest.s
 DRVS = lwwire.s coconic.s
 
 OBJS = $(SRCS:.s=.o)

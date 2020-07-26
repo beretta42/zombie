@@ -8,6 +8,7 @@
 	export	CPS
 
 	import	ping
+	import  ethtest
 
 CPS	equ	60
 
@@ -104,6 +105,7 @@ start	orcc	#$50		; turn off interrupts
 	lbsr	igmp_test
 	lbsr	mdns_init
 	;; testing here
+	lbsr	ethtest
 *	lbsr	ping
 	lbsr	http_get
 	;; start zombie

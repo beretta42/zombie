@@ -38,6 +38,7 @@ ipaddr		extern
 eth_init	extern
 eth_in		extern
 eth_out		extern
+eth_send	extern
 mac		extern
 type		extern
 dmac		extern
@@ -148,6 +149,7 @@ C_SIZE		equ	*	; size of this struct
 
 C_UDP		equ	1
 C_TCP		equ	2
+C_ETH		equ	3
 C_IP		equ	4
 
 ; these status codes are sent to callback functon
