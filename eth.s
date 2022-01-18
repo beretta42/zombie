@@ -4,6 +4,7 @@
 	export	eth_in
 	export	eth_out
 	export  eth_send
+	export  eth_setaddr
 	export  mac
 	export  dmac
 	export	type
@@ -42,7 +43,9 @@ out@	puls	y,u,pc
 
 	;; init this module
 eth_init
+	IFNDEF  ETH_ONLY
 	lbsr	arp_init
+	ENDC
 	leau	mirror,pcr
 	leay	dmac,pcr
 	ldb	#14
@@ -63,10 +66,12 @@ cont@	;; todo: find a raw eth connection here
 	stx	pdu,pcr
 	ldd	12,x
 	leax	14,x
+	IFNDEF  ETH_ONLY
 	cmpd	#$806		; is ARP?
 	lbeq	arp_in
 	cmpd	#$800		; is IPv4?
 	lbeq	ip_in
+	ENDC
 	;; scan table for matching socket
 	ldx	pdu,pcr
 	lbsr	for_sock
@@ -89,8 +94,10 @@ b@	rts
 	
 
 eth_out:
+	IFNDEF  ETH_ONLY
 	lbsr	arp_resolve
 	bcs	out@		; dont send if we sent an ARP request
+	ENDC
 eth2	addd	#14		; add ethernet header length
 	pshs	d
 	leax	-14,x		; alloc eth header
@@ -116,3 +123,14 @@ eth_send:
 	std	type,pcr
 	puls	d,x
 	bra	eth2
+
+eth_setaddr:
+	pshs	x
+	ldd	,x++
+	std	mac,pcr
+	ldd	,x++
+	std	mac+2,pcr
+	ldd	,x++
+	std	mac+4,pcr
+	puls	x
+	jmp	dev_setaddr

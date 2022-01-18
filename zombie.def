@@ -7,6 +7,7 @@ CPS		extern
 dev_send	extern
 dev_poll	extern
 dev_init	extern
+dev_setaddr	extern
 
 arp_setbroad	extern
 arp_init	extern
@@ -39,11 +40,13 @@ eth_init	extern
 eth_in		extern
 eth_out		extern
 eth_send	extern
+eth_setaddr	extern
 mac		extern
 type		extern
 dmac		extern
 bmac		extern
 cmp_mac		extern
+
 
 udp_init	extern
 udp_in		extern
@@ -136,6 +139,7 @@ C_DPORT		rmb	2	; dest sport
 C_CALL		rmb	2	; callback vector
 C_TIME		rmb	2	; timer
 ;; these fields are used for TCP
+   IFNDEF  ETH_ONLY
 C_SNDN		rmb	4	; sequence of next byte to be sent
 C_RCVN		rmb	4	; sequence of next byte to be recv
 C_SNDB		rmb	2	; buffer address of send data
@@ -145,6 +149,7 @@ C_RCVD		rmb	2	; ptr to data in buffer
 C_RCVZ		rmb	2	; size of received packet
 C_TFLG		rmb	1	; out going TCP flags mirror
 C_TFLG2		rmb	1	; remote has closed
+   ENDC
 C_SIZE		equ	*	; size of this struct
 
 C_UDP		equ	1

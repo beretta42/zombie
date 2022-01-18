@@ -17,6 +17,9 @@ TXLEN   equ $ff66
 	export	dev_init
 	export  dev_send
 	export  dev_poll
+	export  dev_setaddr
+	export  getpp
+	export  setpp
 
 	section .code
 
@@ -45,6 +48,25 @@ setpp:
 	rts
 
 
+;;; Called to set device address
+dev_setaddr:
+;; Set chip's MAC
+	pshs	x,y
+	tfr	x,y
+	ldx	#$158		; X is MAC address in NIC
+	ldd	,y++		; get first two MAC address bytes
+	exg	a,b
+	bsr	setpp
+	ldd	,y++		; get next two MAC bytes
+	exg	a,b
+	leax	2,x
+	bsr	setpp
+	ldd	,y		; and set third two (6 bytes total)
+	exg	a,b
+	leax	2,x
+	bsr	setpp
+	puls	x,y,pc
+
 ;;; Called to initialize Device
 ;;;   returns: C set on error
 dev_init:
@@ -67,21 +89,6 @@ dev_init:
 	;; reset chip
 	ldd	#$0040
 	ldx	#$0114
-	bsr	setpp
-	;; Set chip's MAC
-	;;    Fixme: randomly assign MAC ???
-	leay	mac,pcr		; y is mac ptr
-	ldx	#$158		; X is MAC address in NIC
-	ldd	,y++		; get first two MAC address bytes
-	exg	a,b
-	bsr	setpp
-	ldd	,y++		; get next two MAC bytes
-	exg	a,b
-	leax	2,x
-	bsr	setpp
-	ldd	,y		; and set third two (6 bytes total)
-	exg	a,b
-	leax	2,x
 	bsr	setpp
 	;; turn on receiver / transmitter
 	ldd	#$00d3		; Turn on receiver/transmitter

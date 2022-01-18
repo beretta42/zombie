@@ -6,6 +6,11 @@
 	export  lfsr
 	export  dev_in
 	export  dev_need_poll
+	export	inbuf
+	export  insize
+	export  inmax
+	export  pdu
+	export  pdulen
 
 	.area	.data
 MAXBUF	equ	6		; fixme: defined by application
@@ -26,6 +31,14 @@ dev_need_poll
 	rmb	1		; set by device driver if polling needed
 
 rand	rmb	2		; random number
+
+
+inbuf	rmb 	2		; current in buffer
+inmax	rmb	2		; maximum total receive size
+insize	rmb	2		; size of current buffer
+pdu	rmb	2		; start of pdu in current buffer
+pdulen	rmb	2		; length of pdu in current buffer
+
 
 	.area	.code
 
@@ -80,8 +93,8 @@ ip6809_init
 	;; reset device polling flag
 	clr	dev_need_poll
 	;; set random number seed
-	ldd     #42
-	std	rand,pcr
+*	ldd     #42
+*	std	rand,pcr
 	;; clear socket/connection table
 	leay	tab,pcr
 	ldb	#tabe-tab
@@ -96,9 +109,11 @@ ip6809_init
 	stb	time,pcr
 	;; init subsystems
 	lbsr	eth_init
+	IFNDEF  ETH_ONLY
 	lbsr	ip_init
 	lbsr	udp_init
 	lbsr	tcp_init
+	ENDC
 	rts
 
 ;;; get a socket
@@ -129,7 +144,11 @@ found@	stx	conn,pcr
 	export	send
 send	; fixme: distribute to known protocols here
 	; for now just udp
+	IFNDEF  ETH_ONLY
 	lbra	udp_out
+	ELSE
+	rts
+	ENDC
 
 
 ;;; closes a socket
@@ -271,3 +290,20 @@ b@	ldb	,x+
 	bne	a@
 	leas	1,s
 	puls	d,x,pc
+
+;;; copy from U to Y, B times
+	export memcpy
+memcpy
+	lda	,u+
+	sta	,y+
+	decb
+	bne	memcpy
+	rts
+
+;;; clear to zero Y, B times
+	export memclr
+memclr
+a@	clr	,y+
+	decb
+	bne	a@
+	rts

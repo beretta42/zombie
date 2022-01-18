@@ -2,8 +2,6 @@
 
 	export  arp_init
 	export	arp_in
-	export	memcpy
-	export	memclr
 	export  arp_resolve
 	export  arp_setbroad
 
@@ -33,19 +31,6 @@ mirror	.db	1
 broad	.db	192,168,42,255	; todo: set arp table for local broacast
 mirrore
 
-
-memcpy
-	lda	,u+
-	sta	,y+
-	decb
-	bne	memcpy
-	rts
-
-memclr
-a@	clr	,y+
-	decb
-	bne	a@
-	rts
 
 ;;; set the broadcast ip to eth mapping
 arp_setbroad:
