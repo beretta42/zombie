@@ -7,6 +7,7 @@
 	export	dev_send
 	export	dev_init
 	export  dev_poll
+	export  dev_setaddr
 
 ; Used by DWRead and DWWrite
 IntMasks equ   $50
@@ -132,4 +133,7 @@ yes@	puls	cc
 	rts
 no@	puls	cc
 	coma
+	rts
+
+dev_setaddr:
 	rts

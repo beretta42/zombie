@@ -8,6 +8,7 @@
 	export	dev_init
 	export  dev_send
 	export  dev_poll
+	export  dev_setaddr
 
 	section .code
 
@@ -60,3 +61,6 @@ b@	ldb	$ff13		; get a word
 errbig@	stb	$ff12		; drop it
 noth@	coma
 	puls	d,x,y,pc	; pull the test
+
+dev_setaddr
+	rts

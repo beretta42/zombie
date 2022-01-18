@@ -1,9 +1,6 @@
 	include "zombie.def"
 
 	export	start
-	export  insize
-	export  inmax
-	export  inbuf
 	export  put_char
 	export	CPS
 
